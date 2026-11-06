@@ -1,0 +1,55 @@
+Doosan-DT scene verification  2026-11-03 20:19:25
+scene=Assets/Scenes/Doosan-DT.unity  dirty=False  loadedScenes=1
+
+roots=7  gameObjects(Transform)=1476
+rootNames=00_数字孪生机械臂 | 20_漫游与训练 | 30_界面与交互 | 40_环境与灯光 | 50_玩家与相机 | 90_全局设置 | ~_外部引用保留
+
+== per group ==
+  00_数字孪生机械臂       active=235  (all 619  ) groupActive=True  renderers=99   bounds=(-6.94, 1.44, -12.61) size (1.24, 1.86, 1.85)
+  20_漫游与训练         active=97   (all 391  ) groupActive=True  renderers=89   bounds=(-7.08, 0.97, -7.77) size (0.90, 0.93, 1.20)
+  30_界面与交互         active=5    (all 86   ) groupActive=True  renderers=0    bounds=none
+  40_环境与灯光         active=145  (all 307  ) groupActive=True  renderers=94   bounds=(-5.04, 2.03, -7.58) size (10.00, 4.05, 15.01)
+  50_玩家与相机         active=3    (all 67   ) groupActive=True  renderers=0    bounds=none
+  90_全局设置          active=4    (all 4    ) groupActive=True  renderers=0    bounds=none
+  ~_外部引用保留         active=1    (all 2    ) groupActive=False renderers=0    bounds=none
+
+== duplicates / singletons ==
+  Cameras total=3 active=1
+     [-] Main Camera tag=MainCamera depth=-1 pos=(3.66, 1.49, -0.41)
+     [-] Main Camera tag=MainCamera depth=-1 pos=(-4.83, 1.45, -10.76)
+     [A] Main Camera tag=MainCamera depth=-1 pos=(-3.59, 2.46, -10.79)
+  AudioListeners total=3 active=1
+  EventSystems total=2 active=1
+  GraphicRaycasters total=12 active=2
+  Lights total=6 active=4 directionalActive=2
+
+== key behaviour counts (active | all) ==
+  DisassemblySystem            active=1    all=1
+  LayerGroupConfig             active=3    all=3
+  DisassemblyPart              active=5    all=5
+  PerformanceProfiler          active=1    all=1
+  SmartRaycaster               active=1    all=3
+  DigitalTwinRuntime           active=1    all=1
+  TwinRecorder                 active=2    all=2
+  Ros2Bridge                   active=1    all=1
+  TwinUIController             active=1    all=2
+  Ros2ExperimentPanel          active=1    all=1
+
+== missing scripts ==
+  MISSING on 30_界面与交互/Canvas/登录界面 (component slot 1)
+  MISSING on 50_玩家与相机/player/XR Origin (XR Rig)/Camera Offset/Gaze Interactor (component slot 4)
+  missingScriptInstances=2
+
+== tags ==
+  Untagged = 1469
+  robot = 4
+  MainCamera = 3
+
+== layers ==
+  0 (Default) = 1367
+  5 (UI) = 99
+  2 (Ignore Raycast) = 10
+
+== archive group ==
+  ~_外部引用保留 activeSelf=False objects=2 activeBelow=1
+     - UI_System objects=1

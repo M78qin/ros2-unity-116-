@@ -1,0 +1,27 @@
+{
+  "captured_at": "2026-11-02T20:50+08:00",
+  "source": "live /dsr01/joint_states (encoder), robot静止",
+  "note": "当前姿态 = 本次实验 home 点；实验结束必须回到这组值，不是全 0",
+  "joint_rad": {
+    "joint_1": 0.857998,
+    "joint_2": -0.329658,
+    "joint_3": 1.883608,
+    "joint_4": 1.587327,
+    "joint_5": -0.855288,
+    "joint_6": -6.268371
+  },
+  "joint_deg": {
+    "joint_1": 49.1596,
+    "joint_2": -18.8880,
+    "joint_3": 107.9228,
+    "joint_4": 90.9471,
+    "joint_5": -49.0044,
+    "joint_6": -359.1512
+  },
+  "controller_config": {
+    "current_tool": "Tool weight jiazhua",
+    "current_tcp": "Screw_test",
+    "read_via": "/dsr01/tool/get_current_tool, /dsr01/tcp/get_current_tcp",
+    "weight_value_readable": false
+  }
+}

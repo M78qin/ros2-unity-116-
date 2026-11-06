@@ -1,0 +1,258 @@
+=== Build Doosan-DT : 2026-11-03 16:38:27 ===
+created Assets/Scenes/Doosan-DT.unity
+groups created: 00_数字孪生机械臂, 10_电池包拆解系统, 20_漫游与训练, 30_界面与交互, 40_环境与灯光, 50_玩家与相机, 90_全局设置, ~_归档停用
+--- SampleScene.unity roots=13
+    ~ -> ~_归档停用
+    Main Camera -> 50_玩家与相机
+    Directional Light -> 40_环境与灯光
+    4.24-Try -> 00_数字孪生机械臂
+    4.24-Try _bk519 -> ~_归档停用
+    4.24-Try (1) -> ~_归档停用
+    UI_System -> ~_归档停用
+    EventSystem -> 30_界面与交互
+    Planning_Control_System -> ~_归档停用
+    DataLogging_System -> 00_数字孪生机械臂
+    H2515_DigitalTwinRuntimeCanvas -> ~_归档停用
+    Ros2Experimen -> 00_数字孪生机械臂
+    dartstudio_E -> ~_归档停用
+--- MainScene.unity roots=3
+    其他/VR拆解_传统设置_Test -> ~_归档停用
+    其他/VR拆解_多零件 -> ~_归档停用
+    其他/Directional Light -> 40_环境与灯光
+    其他/Global Volume -> 90_全局设置
+    其他/EVB_DS  -> 40_环境与灯光
+    其他/FunctionModule -> 20_漫游与训练
+    其他/Canvas -> 30_界面与交互
+    其他/EventSystem -> 30_界面与交互
+    其他/XR Interaction Manager -> 30_界面与交互
+    其他/GameObject -> ~_归档停用
+    其他/爆炸用 (1) -> 20_漫游与训练
+    其他/测试2_自动 -> ~_归档停用
+    其他 (emptied) -> ~_归档停用
+    player -> 50_玩家与相机
+    VR拆解 -> 10_电池包拆解系统
+deactivated duplicate twin Main Camera
+deactivated duplicate twin EventSystem
+deactivated duplicate twin Directional Light
+group ~_归档停用 set inactive
+added to Build Settings
+scene objects (Transform count) = 5434
+
+=== hierarchy (depth <= 3) ===
+00_数字孪生机械臂  [A]  components=0 pos=(0.00, 0.00, 0.00)
+    4.24-Try  [A]  components=0 pos=(2.67, -0.44, -2.30)
+        ROS2  [A]  components=1 pos=(2.67, -0.44, -2.30)
+        DigitalTwin_System  [A]  components=4 pos=(2.67, -0.44, -2.30)
+        DART  [A]  components=1 pos=(2.67, -0.44, -2.30)
+        H2516-Ghost  [-]  components=2 pos=(2.67, -0.44, -2.30)
+            Plugins  [A]  components=1 pos=(2.67, -0.44, -2.30)
+            base_link  [A]  components=3 pos=(2.67, -0.44, -2.30)
+        h2515-1 (4)  [A]  components=2 pos=(2.67, -0.44, -2.30)
+            Plugins  [A]  components=2 pos=(2.67, -0.44, -2.30)
+            base_link  [A]  components=6 pos=(2.67, -0.44, -2.30)
+        h2515-1 (5)  [-]  components=2 pos=(2.67, -0.44, -2.30)
+            Plugins  [A]  components=1 pos=(2.67, -0.44, -2.30)
+            base_link  [A]  components=3 pos=(2.67, -0.44, -2.30)
+        h2515-1 (6)  [-]  components=2 pos=(0.50, 0.78, 0.98)
+            Plugins  [A]  components=1 pos=(0.50, 0.78, 0.98)
+            base_link  [A]  components=3 pos=(0.50, 0.78, 0.98)
+    DataLogging_System  [A]  components=1 pos=(2.28, 1.10, -2.34)
+    Ros2Experimen  [A]  components=1 pos=(2.44, 0.56, -2.50)
+
+10_电池包拆解系统  [A]  components=0 pos=(0.00, 0.00, 0.00)
+    VR拆解  [A]  components=0 pos=(-7.44, 0.75, -12.54)
+        Dis_1  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+            Lay1  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+            Lay2  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+            Lay3  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+        PerformanceMonitor  [A]  components=1 pos=(-5.52, 1.62, -12.91)
+
+20_漫游与训练  [A]  components=0 pos=(0.00, 0.00, 0.00)
+    FunctionModule  [A]  components=0 pos=(-56.02, -47.27, -9.96)
+        Roaming_M  [A]  components=0 pos=(-56.02, -47.18, -9.96)
+            爆炸用  [A]  components=2 pos=(-7.06, 0.50, -7.78)
+            复原用  [-]  components=2 pos=(-7.06, 0.50, -7.78)
+        Dis-Training_M  [-]  components=0 pos=(-56.02, -47.27, -9.96)
+            EVB  [-]  components=0 pos=(-0.13, 0.19, -0.13)
+            EVB (1)  [A]  components=2 pos=(-0.13, 0.19, -0.16)
+            放置台 _2  [A]  components=3 pos=(-0.13, 0.19, -0.13)
+            TimeLine_control  [A]  components=2 pos=(-56.02, -47.27, -9.96)
+    爆炸用 (1)  [A]  components=2 pos=(-6.01, 0.50, -13.04)
+        放置台 _2  [A]  components=3 pos=(-13.98, 0.21, -6.49)
+        EVB  [-]  components=1 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 上盖-1  [A]  components=3 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 下壳体-1  [A]  components=3 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 模组装配-1 模组-1  [A]  components=3 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 模组装配-1 长条2-1  [A]  components=2 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 模组装配-1 长条2-2  [A]  components=3 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 模组装配-2 模组-1  [A]  components=3 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 模组装配-2 长条2-1  [A]  components=2 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 模组装配-2 长条2-2  [A]  components=2 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 装配体——零件2-1   [A]  components=2 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 装配体——零件2-1 .001  [A]  components=2 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 装配体——零件2-1 .002  [A]  components=2 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 装配体——零件2-1 零  [A]  components=2 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 长条——零件1-1  [A]  components=2 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 黑1——零件3-1  [A]  components=3 pos=(-13.98, 0.21, -6.49)
+            装配体1 - 电池总装配体-1 黑2——零件4-1  [A]  components=2 pos=(-13.98, 0.21, -6.49)
+        EVB (1)  [A]  components=1 pos=(-13.98, 0.21, -6.49)
+
+30_界面与交互  [A]  components=0 pos=(0.00, 0.00, 0.00)
+    EventSystem (DT_停用)  [-]  components=2 pos=(0.00, 0.01, 0.00)
+    Canvas  [A]  components=0 pos=(-4.25, 1.60, -7.69)
+        Canvas_1_V  [-]  components=4 pos=(-6.45, 2.22, -7.85)
+            Video_play1  [A]  components=0 pos=(-6.45, 1.53, -7.90)
+        Canvas_1 P  [-]  components=4 pos=(-6.42, 2.32, -7.90)
+            Panel_1  [-]  components=2 pos=(-6.69, 3.00, -9.76)
+            Panel_2  [-]  components=2 pos=(-6.69, 3.00, -9.76)
+        Canvas_I  [-]  components=4 pos=(-4.25, 1.60, -7.69)
+            Panel  [A]  components=3 pos=(-4.25, 1.60, -7.69)
+            Text (TMP)  [A]  components=2 pos=(-4.25, 1.60, -7.69)
+        Canvas_I软著用标题  [-]  components=4 pos=(-4.25, 1.60, -7.69)
+            Panel  [A]  components=2 pos=(-4.25, 1.60, -7.69)
+            LoginPanel  [A]  components=2 pos=(-4.25, 1.60, -7.69)
+        User_ui  [-]  components=4 pos=(-4.25, 1.60, -7.69)
+            Button  [A]  components=4 pos=(-4.25, 1.60, -7.69)
+        登录界面  [A]  components=0 pos=(-4.25, 1.60, -7.69)
+    EventSystem  [A]  components=2 pos=(0.00, 0.00, 0.00)
+    XR Interaction Manager  [A]  components=1 pos=(-7.09, 1.39, -11.23)
+
+40_环境与灯光  [A]  components=0 pos=(0.00, 0.00, 0.00)
+    Directional Light  [-]  components=2 pos=(0.00, 3.00, 0.00)
+    Directional Light  [A]  components=2 pos=(0.00, 0.00, 0.00)
+    EVB_DS   [A]  components=0 pos=(0.00, 0.00, 0.00)
+        Doosan_Robot_a_Tool  [A]  components=0 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - DoosanRobot-H2515-1  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - DoosanRobot-H2515-1 BAS  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - DoosanRobot-H2515-1 FLA  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - DoosanRobot-H2515-1 J1_  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - DoosanRobot-H2515-1 J4_  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - DoosanRobot-H2515-1 J6_  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - DoosanRobot-H2515-1 LIN  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - DoosanRobot-H2515-1.001  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - DoosanRobot-H2515-1.002  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - DoosanRobot-H2515-1.003  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - eme38-20_with_csm01  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - eme38-20_with_csm010710  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - 装配体2^工具  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - 装配体2^工具.001  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - 装配体2^工具.002  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - 装配体2^工具.003  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - 装配体2^工具.005  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - 装配体2^工具.006  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            工具装配方案1 - 电爪安装架 - 装配体2^工具装配  [A]  components=2 pos=(-7.95, 0.76, -10.11)
+            Cube (1)  [A]  components=3 pos=(-8.91, 0.60, -7.59)
+            panel2_R (1)  [A]  components=4 pos=(-8.16, 2.20, -6.02)
+        Doosan_Robot  [-]  components=0 pos=(-0.34, 0.27, 0.21)
+            Cube  [A]  components=3 pos=(-8.55, 0.58, -7.68)
+            机器人  [A]  components=0 pos=(-8.63, 0.75, -8.09)
+            panel2_R  [A]  components=4 pos=(-8.07, 1.84, -6.36)
+        Lab  [A]  components=2 pos=(0.01, 0.00, 0.00)
+            floor  [A]  components=5 pos=(-5.04, 0.41, -7.58)
+            Decorations  [A]  components=0 pos=(-1.19, 0.20, 1.31)
+            cell  [A]  components=3 pos=(-5.04, 3.97, -7.58)
+            window  [A]  components=3 pos=(-7.04, 2.20, -0.23)
+            Teleport Anchor  [A]  components=1 pos=(-5.83, 0.48, -7.76)
+            panel1  [A]  components=4 pos=(-6.62, 2.15, -4.35)
+        Mec_Parts  [-]  components=0 pos=(0.00, 0.00, 0.00)
+            主轴  [A]  components=0 pos=(-8.66, 2.32, -10.83)
+            主轴与相机  [A]  components=0 pos=(-10.66, 0.52, -9.97)
+             Table  [A]  components=3 pos=(-8.67, 1.15, -10.29)
+        EVB  [-]  components=0 pos=(-7.06, 0.49, -7.78)
+            EVB  [A]  components=0 pos=(-0.13, 0.19, -0.13)
+            screw  [A]  components=0 pos=(-0.13, 0.19, -0.13)
+            放置台 _2  [A]  components=2 pos=(-0.13, 0.19, -0.13)
+
+50_玩家与相机  [A]  components=0 pos=(0.00, 0.00, 0.00)
+    Main Camera  [-]  components=4 pos=(3.66, 1.49, -0.41)
+    player  [A]  components=2 pos=(-4.83, 2.65, -10.76)
+        Main Camera  [A]  components=6 pos=(-3.59, 2.46, -10.79)
+        XR Origin (XR Rig)  [-]  components=5 pos=(-4.83, 0.09, -10.76)
+            Camera Offset  [A]  components=0 pos=(-4.83, 1.45, -10.76)
+            Locomotion  [A]  components=2 pos=(-4.83, 0.09, -10.76)
+
+90_全局设置  [A]  components=0 pos=(0.00, 0.00, 0.00)
+    Global Volume  [A]  components=1 pos=(0.00, 0.00, 0.00)
+
+~_归档停用  [-]  components=0 pos=(0.00, 0.00, 0.00)
+    ~  [A]  components=0 pos=(254.12, 460.41, 6.76)
+        纯模型  [A]  components=0 pos=(0.00, 0.00, 0.00)
+            h2515 (2)  [-]  components=2 pos=(0.00, 0.00, 0.00)
+            h2515 (3)  [-]  components=2 pos=(0.00, 0.00, 0.00)
+        Backup-a  [A]  components=0 pos=(0.50, 0.78, 0.79)
+            ROS_Manager_backup  [-]  components=0 pos=(-0.75, 0.32, -2.09)
+            h2515_backup (1)  [-]  components=2 pos=(0.50, 0.78, 0.79)
+            h2515_backup (2)  [-]  components=2 pos=(0.50, 0.78, 0.79)
+            h2515 _手动控制  [-]  components=2 pos=(0.00, 0.00, 0.00)
+        Ros2_try1-有问题  [-]  components=0 pos=(0.00, 0.00, 0.00)
+            h2515  [A]  components=2 pos=(0.00, 0.00, 0.00)
+            ROS_Manager  [A]  components=0 pos=(0.00, 0.00, 0.00)
+            ROS2  [A]  components=0 pos=(0.00, 0.00, 0.00)
+            控制验证  [A]  components=0 pos=(-0.31, 0.96, 0.25)
+        Doosan_Unity_Try1  [-]  components=0 pos=(0.00, 0.00, 0.00)
+            RobotBridge  [A]  components=0 pos=(0.27, 1.22, 0.44)
+            h2515 (1)  [A]  components=2 pos=(0.00, 0.00, 0.00)
+        IK  [-]  components=0 pos=(2.75, 0.59, -1.94)
+    4.24-Try _bk519  [-]  components=0 pos=(2.67, -0.44, -2.30)
+        DigitalTwin_System  [A]  components=4 pos=(2.67, -0.44, -2.30)
+        DART  [A]  components=1 pos=(2.67, -0.44, -2.30)
+        H2516-Ghost  [-]  components=2 pos=(2.67, -0.44, -2.30)
+            Plugins  [A]  components=1 pos=(2.67, -0.44, -2.30)
+            base_link  [A]  components=3 pos=(2.67, -0.44, -2.30)
+        h2515-1 (4)  [A]  components=2 pos=(2.67, -0.44, -2.30)
+            Plugins  [A]  components=2 pos=(2.67, -0.44, -2.30)
+            base_link  [A]  components=6 pos=(2.67, -0.44, -2.30)
+        h2515-1 (5)  [-]  components=2 pos=(2.67, -0.44, -2.30)
+            Plugins  [A]  components=1 pos=(2.67, -0.44, -2.30)
+            base_link  [A]  components=3 pos=(2.67, -0.44, -2.30)
+        h2515-1 (6)  [-]  components=2 pos=(0.50, 0.78, 0.98)
+            Plugins  [A]  components=1 pos=(0.50, 0.78, 0.98)
+            base_link  [A]  components=3 pos=(0.50, 0.78, 0.98)
+    4.24-Try (1)  [-]  components=0 pos=(2.67, -0.44, -2.49)
+        DigitalTwinRuntime  [-]  components=4 pos=(2.67, -0.44, -2.49)
+        DART  [A]  components=0 pos=(2.67, -0.44, -2.49)
+        h2515-1 (4)  [A]  components=2 pos=(2.67, -0.44, -2.49)
+            Plugins  [A]  components=1 pos=(2.67, -0.44, -2.49)
+            base_link  [A]  components=5 pos=(2.67, -0.44, -2.49)
+        h2515-1 (5)  [-]  components=2 pos=(0.50, 0.78, 0.79)
+            Plugins  [A]  components=1 pos=(0.50, 0.78, 0.79)
+            base_link  [A]  components=3 pos=(0.50, 0.78, 0.79)
+        h2515-1 (6)  [-]  components=2 pos=(0.50, 0.78, 0.79)
+            Plugins  [A]  components=1 pos=(0.50, 0.78, 0.79)
+            base_link  [A]  components=3 pos=(0.50, 0.78, 0.79)
+    UI_System  [-]  components=1 pos=(2.26, 0.19, -1.77)
+    Planning_Control_System  [A]  components=0 pos=(2.28, 1.10, -2.34)
+    H2515_DigitalTwinRuntimeCanvas  [-]  components=3 pos=(0.00, 0.00, 0.00)
+        H2515_DigitalTwinRuntimePanel  [A]  components=5 pos=(0.00, 0.00, 0.00)
+            DragHandle  [A]  components=2 pos=(0.00, 0.00, 0.00)
+            ContentRoot  [A]  components=4 pos=(0.00, 0.00, 0.00)
+            RealExecuteConfirmPanel  [-]  components=3 pos=(0.00, 0.00, 0.00)
+            ResizeHandle  [A]  components=2 pos=(0.00, 0.00, 0.00)
+    dartstudio_E  [-]  components=0 pos=(2.44, 0.56, -2.50)
+        TCP反馈  [-]  components=2 pos=(2.64, 0.73, -2.75)
+        Experiment_System  [-]  components=1 pos=(1.98, 0.53, -3.85)
+        Dart_E_Experiment  [-]  components=1 pos=(2.53, 0.48, -2.49)
+    VR拆解_传统设置_Test  [-]  components=0 pos=(-7.44, 0.75, -12.54)
+        Dis_1  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+            Lay1  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+        PerformanceMonitor  [A]  components=1 pos=(-5.52, 1.62, -12.91)
+    VR拆解_多零件  [-]  components=0 pos=(-7.44, 0.75, -12.54)
+        Dis_1  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+            Lay1  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+            Lay2  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+            Lay3  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+        PerformanceMonitor  [A]  components=1 pos=(-5.52, 1.62, -12.91)
+    GameObject  [-]  components=0 pos=(-13.46, -5.93, -21.11)
+        Fuse (1)  [A]  components=3 pos=(-21.76, 0.39, -6.49)
+        装配体1 - 电池总装配体-1 装配体——零件2-1  (1)  [A]  components=3 pos=(-21.75, 0.39, -6.49)
+    测试2_自动  [-]  components=0 pos=(0.00, 0.00, 0.00)
+        Dis_1 (1)  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+            Lay1  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+            Lay2  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+            Lay3  [A]  components=1 pos=(-5.70, -6.11, -21.11)
+        PerformanceMonitor (1)  [A]  components=1 pos=(-5.52, 1.62, -12.91)
+        自动脚本  [A]  components=0 pos=(0.00, 0.00, 0.00)
+        位姿点1  [A]  components=0 pos=(-4.50, 2.23, -12.44)
+    其他  [A]  components=0 pos=(-6.03, 1.30, -13.08)
+
+DONE

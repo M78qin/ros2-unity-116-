@@ -63,6 +63,12 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# 本地备份 / 工具缓存 / agent 运行态（不上传）
+_backup/
+.codex/
+.agents/
+__pycache__/
+
 # ========== 第三方 / 非自写资源目录（整目录忽略）==========
 /[Aa]ssets/TextMesh Pro/
 /[Aa]ssets/Samples/

@@ -1,0 +1,44 @@
+﻿EVB fusion asset audit  2026-11-03 16:46:13
+project=E:\new_2026-\unity\project\Unity_Ros_Try1
+roots=Assets/DoosanDT/20_BatteryDisassembly/Assets,Assets/DoosanDT/20_BatteryDisassembly/Scripts,Assets/DoosanDT/20_BatteryDisassembly/Fonts,Assets/DoosanDT/20_BatteryDisassembly/Shaders,Assets/DoosanDT/20_BatteryDisassembly/Animation,Assets/DoosanDT/20_BatteryDisassembly/Editor,Assets/DoosanDT/20_BatteryDisassembly/Others
+
+== prefabs ==
+  Assets/DoosanDT/20_BatteryDisassembly/Assets/Prefabs/Doosan_Robot.prefab | objects=12 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Assets/Prefabs/EVB.prefab | objects=16 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Assets/Prefabs/EVB_DS .prefab | objects=269 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Assets/Prefabs/EVB_DS_01 .prefab | objects=269 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Assets/Prefabs/Roaming_M.prefab | objects=185 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Assets/Prefabs/V_Panel.prefab | objects=5 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Assets/Prefabs/爆炸用.prefab | objects=92 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Others/O_Prefab/Blaser-Long.prefab | objects=9 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Others/O_Prefab/Gaze Interactable Table.prefab | objects=1 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Others/O_Prefab/Interactable Kinematic Torus.prefab | objects=5 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Others/O_Prefab/Interactables Sample.prefab | objects=16 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Others/O_Prefab/Poke Interactions Info.prefab | objects=9 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Others/O_Prefab/Poke Interactions Sample.prefab | objects=29 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Others/O_Prefab/Teleport Anchor.prefab | objects=6 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Others/O_Prefab/Teleport Area.prefab | objects=2 missingScript=0
+  Assets/DoosanDT/20_BatteryDisassembly/Others/O_Prefab/UI Sample.prefab | objects=70 missingScript=0
+
+== materials ==
+  materials=35 nullShader=0 builtinShader=0
+
+== other imported types ==
+  Texture=39
+  Font=1
+  Model=8
+  Shader=3
+  AnimationClip=3
+  MonoScript=17
+
+== tags/layers used by migrated prefabs ==
+  unknownTags=<none>
+  layer[5] usedByObjects=105
+
+== missing-script detail ==
+  <none>
+
+== shader detail ==
+  <none>
+
+SUMMARY prefabs=16 missingScriptInstances=0 materials=35 nullShader=0 builtinShader=0

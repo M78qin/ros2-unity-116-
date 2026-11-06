@@ -1,0 +1,195 @@
+========== Scene Stats @ 2026-11-03 20:03:48 ==========
+scene=Assets/Scenes/Doosan-DT.unity  dirty=True
+gameObjects(total)=6154  activeTransforms=828
+meshRenderers=3070 (active=282)  skinned=2
+roots=9
+cameras=3  lights=4  lightProbeGroups=0  reflectionProbes=0
+volumes=1
+triangles(total)=11823679  triangles(active)=984136  distinctMeshes=191  distinctMaterials=35
+outlineComponents=2153  enabled=38  enabledActive=3
+textures(Assets)=127  estUncompressedMemoryMB=221.9
+sceneFileMB=12.17
+
+========== Scene Stats @ 2026-11-03 20:07:28 ==========
+scene=Assets/Scenes/Doosan-DT.unity  dirty=True
+gameObjects(total)=6154  activeTransforms=828
+meshRenderers=3070 (active=282)  skinned=2
+roots=9
+cameras=3  lights=4  lightProbeGroups=0  reflectionProbes=0
+volumes=1
+triangles(total)=11823679  triangles(active)=984136  distinctMeshes=191  distinctMaterials=35
+outlineComponents=2153  enabled=38  enabledActive=3
+textures(Assets)=127  estUncompressedMemoryMB=221.9
+sceneFileMB=12.17
+
+========== Scene Stats @ 2026-11-03 20:07:55 ==========
+scene=Assets/Scenes/Doosan-DT.unity  dirty=True
+gameObjects(total)=6154  activeTransforms=828
+meshRenderers=3070 (active=282)  skinned=2
+roots=9
+cameras=3  lights=4  lightProbeGroups=0  reflectionProbes=0
+volumes=1
+triangles(total)=11823679  triangles(active)=984136  distinctMeshes=191  distinctMaterials=35
+outlineComponents=2153  enabled=38  enabledActive=3
+textures(Assets)=127  estUncompressedMemoryMB=221.9
+sceneFileMB=12.17
+
+========== Scene Stats @ 2026-11-03 20:08:46 ==========
+scene=Assets/Scenes/Doosan-DT.unity  dirty=True
+gameObjects(total)=6154  activeTransforms=828
+meshRenderers=3070 (active=282)  skinned=2
+roots=9
+cameras=3  lights=4  lightProbeGroups=0  reflectionProbes=0
+volumes=1
+--- roots ---
+  ~  activeSelf=False  transforms=3963  activeInHierarchy=6
+  00_数字孪生机械臂  activeSelf=True  transforms=619  activeInHierarchy=235
+  00_数字孪生机械臂-bkup113  activeSelf=False  transforms=619  activeInHierarchy=235
+  10_电池包拆解系统-bkup113  activeSelf=False  transforms=100  activeInHierarchy=100
+  20_漫游与训练  activeSelf=True  transforms=391  activeInHierarchy=97
+  30_界面与交互  activeSelf=True  transforms=86  activeInHierarchy=5
+  40_环境与灯光  activeSelf=True  transforms=307  activeInHierarchy=145
+  50_玩家与相机  activeSelf=True  transforms=67  activeInHierarchy=3
+  90_全局设置  activeSelf=True  transforms=2  activeInHierarchy=2
+
+triangles(total)=11823679  triangles(active)=984136  distinctMeshes=191  distinctMaterials=35
+outlineComponents=2153  enabled=38  enabledActive=3
+textures(Assets)=127  estUncompressedMemoryMB=221.9
+sceneFileMB=12.17
+
+OUTLINE total=2153 enabledBefore=38 kept=4 disabled=34 enabledAfter=4
+STATIC marked renderers=227 under 40_环境与灯光
+========== Scene Stats @ 2026-11-03 20:09:03 ==========
+scene=Assets/Scenes/Doosan-DT.unity  dirty=False
+gameObjects(total)=6154  activeTransforms=828
+meshRenderers=3070 (active=282)  skinned=2
+roots=9
+cameras=3  lights=4  lightProbeGroups=0  reflectionProbes=0
+volumes=1
+--- roots ---
+  ~  activeSelf=False  transforms=3963  activeInHierarchy=6
+  00_数字孪生机械臂  activeSelf=True  transforms=619  activeInHierarchy=235
+  00_数字孪生机械臂-bkup113  activeSelf=False  transforms=619  activeInHierarchy=235
+  10_电池包拆解系统-bkup113  activeSelf=False  transforms=100  activeInHierarchy=100
+  20_漫游与训练  activeSelf=True  transforms=391  activeInHierarchy=97
+  30_界面与交互  activeSelf=True  transforms=86  activeInHierarchy=5
+  40_环境与灯光  activeSelf=True  transforms=307  activeInHierarchy=145
+  50_玩家与相机  activeSelf=True  transforms=67  activeInHierarchy=3
+  90_全局设置  activeSelf=True  transforms=2  activeInHierarchy=2
+
+triangles(total)=11823679  triangles(active)=984136  distinctMeshes=191  distinctMaterials=35
+outlineComponents=2153  enabled=4  enabledActive=2
+textures(Assets)=127  estUncompressedMemoryMB=221.9
+sceneFileMB=13.17
+
+SNAPSHOT view_robot_before -> E:\new_2026-\unity\project\Unity_Ros_Try1\Logs\doosan_dt_view_robot_before.png
+SNAPSHOT view_workcell_before -> E:\new_2026-\unity\project\Unity_Ros_Try1\Logs\doosan_dt_view_workcell_before.png
+SNAPSHOT view_wide_before -> E:\new_2026-\unity\project\Unity_Ros_Try1\Logs\doosan_dt_view_wide_before.png
+SNAPSHOT suffix=_before robotCenter=(-7.89, 2.05, -10.97) robotSize=(3.13, 3.08, 5.14)
+OUTLINE total=2153 enabledBefore=4 kept=2070 disabled=0 enabledAfter=2070
+OUTLINE total=2153 enabledBefore=2070 kept=92 disabled=1978 enabledAfter=92
+EXTRACT aborted: externalReferences=1 sample=DigitalTwinRuntime->UI_System; 
+SNAPSHOT view_robot_before -> E:\new_2026-\unity\project\Unity_Ros_Try1\Logs\doosan_dt_view_robot_before.png
+SNAPSHOT view_workcell_before -> E:\new_2026-\unity\project\Unity_Ros_Try1\Logs\doosan_dt_view_workcell_before.png
+SNAPSHOT view_wide_before -> E:\new_2026-\unity\project\Unity_Ros_Try1\Logs\doosan_dt_view_wide_before.png
+SNAPSHOT suffix=_before robotCenter=(-6.94, 1.44, -12.61) robotSize=(1.24, 1.86, 1.85)
+EXTRACT keepReferenced refs=1 roots=[~] sample=DigitalTwinRuntime->UI_System; 
+EXTRACT roots=[00_数字孪生机械臂-bkup113=619,10_电池包拆解系统-bkup113=100] -> Assets/Scenes/Doosan-DT_Archive.unity  mainSceneMB=11.90
+========== Scene Stats @ 2026-11-03 20:14:19 ==========
+scene=Assets/Scenes/Doosan-DT.unity  dirty=False
+gameObjects(total)=6155  activeTransforms=488
+meshRenderers=3070 (active=282)  skinned=2
+roots=7
+cameras=3  lights=4  lightProbeGroups=0  reflectionProbes=0
+volumes=1
+--- roots ---
+  00_数字孪生机械臂  activeSelf=True  transforms=619  activeInHierarchy=235
+  20_漫游与训练  activeSelf=True  transforms=391  activeInHierarchy=97
+  30_界面与交互  activeSelf=True  transforms=86  activeInHierarchy=5
+  40_环境与灯光  activeSelf=True  transforms=307  activeInHierarchy=145
+  50_玩家与相机  activeSelf=True  transforms=67  activeInHierarchy=3
+  90_全局设置  activeSelf=True  transforms=2  activeInHierarchy=2
+  ~_外部引用保留  activeSelf=False  transforms=3964  activeInHierarchy=1
+
+triangles(total)=11823679  triangles(active)=984136  distinctMeshes=191  distinctMaterials=35
+outlineComponents=2153  enabled=92  enabledActive=3
+textures(Assets)=127  estUncompressedMemoryMB=221.9
+sceneFileMB=11.90
+
+EXTRACT keepReferenced refs=2 objects=[UI_System] sample=DigitalTwinRuntime->UI_System; DigitalTwinRuntime->UI_System; 
+========== Scene Stats @ 2026-11-03 20:15:45 ==========
+scene=Assets/Scenes/Doosan-DT.unity  dirty=False
+gameObjects(total)=6155  activeTransforms=488
+meshRenderers=3070 (active=282)  skinned=2
+roots=7
+cameras=3  lights=4  lightProbeGroups=0  reflectionProbes=0
+volumes=1
+--- roots ---
+  00_数字孪生机械臂  activeSelf=True  transforms=619  activeInHierarchy=235
+  20_漫游与训练  activeSelf=True  transforms=391  activeInHierarchy=97
+  30_界面与交互  activeSelf=True  transforms=86  activeInHierarchy=5
+  40_环境与灯光  activeSelf=True  transforms=307  activeInHierarchy=145
+  50_玩家与相机  activeSelf=True  transforms=67  activeInHierarchy=3
+  90_全局设置  activeSelf=True  transforms=2  activeInHierarchy=2
+  ~_外部引用保留  activeSelf=False  transforms=3964  activeInHierarchy=1
+
+triangles(total)=11823679  triangles(active)=984136  distinctMeshes=191  distinctMaterials=35
+outlineComponents=2153  enabled=92  enabledActive=3
+textures(Assets)=127  estUncompressedMemoryMB=221.9
+sceneFileMB=11.90
+
+EXTRACT keepReferenced refs=2 objects=[UI_System] sample=DigitalTwinRuntime->UI_System; DigitalTwinRuntime->UI_System; 
+EXTRACT pre-move archives=[~:3962] keep=[UI_System]
+EXTRACT roots=[~=3962] -> Assets/Scenes/Doosan-DT_Archive.unity  mainSceneMB=3.26
+========== Scene Stats @ 2026-11-03 20:17:43 ==========
+scene=Assets/Scenes/Doosan-DT.unity  dirty=False
+gameObjects(total)=1474  activeTransforms=488
+meshRenderers=749 (active=282)  skinned=2
+roots=7
+cameras=3  lights=4  lightProbeGroups=0  reflectionProbes=0
+volumes=1
+--- roots ---
+  00_数字孪生机械臂  activeSelf=True  transforms=619  activeInHierarchy=235
+  20_漫游与训练  activeSelf=True  transforms=391  activeInHierarchy=97
+  30_界面与交互  activeSelf=True  transforms=86  activeInHierarchy=5
+  40_环境与灯光  activeSelf=True  transforms=307  activeInHierarchy=145
+  50_玩家与相机  activeSelf=True  transforms=67  activeInHierarchy=3
+  90_全局设置  activeSelf=True  transforms=2  activeInHierarchy=2
+  ~_外部引用保留  activeSelf=False  transforms=2  activeInHierarchy=1
+
+triangles(total)=2884871  triangles(active)=984136  distinctMeshes=191  distinctMaterials=35
+outlineComponents=162  enabled=5  enabledActive=3
+textures(Assets)=127  estUncompressedMemoryMB=221.9
+sceneFileMB=3.26
+
+SNAPSHOT view_robot_before -> E:\new_2026-\unity\project\Unity_Ros_Try1\Logs\doosan_dt_view_robot_before.png
+SNAPSHOT view_workcell_before -> E:\new_2026-\unity\project\Unity_Ros_Try1\Logs\doosan_dt_view_workcell_before.png
+SNAPSHOT view_wide_before -> E:\new_2026-\unity\project\Unity_Ros_Try1\Logs\doosan_dt_view_wide_before.png
+SNAPSHOT suffix=_before robotCenter=(-6.94, 1.44, -12.61) robotSize=(1.24, 1.86, 1.85)
+URP asset=Assets/Settings/URP-HighFidelity.asset colorGrading=HDR
+LIGHTING applied sky=Assets/DoosanDT/10_DigitalTwin/Art/Materials/DoosanDT_IndustrialSky.mat profile=Assets/DoosanDT/10_DigitalTwin/Art/Config/DoosanDT_VisualProfile.asset mainLight=Directional Light fillLights=2 directionalTotal=2
+SNAPSHOT view_robot_after -> E:\new_2026-\unity\project\Unity_Ros_Try1\Logs\doosan_dt_view_robot_after.png
+SNAPSHOT view_workcell_after -> E:\new_2026-\unity\project\Unity_Ros_Try1\Logs\doosan_dt_view_workcell_after.png
+SNAPSHOT view_wide_after -> E:\new_2026-\unity\project\Unity_Ros_Try1\Logs\doosan_dt_view_wide_after.png
+SNAPSHOT suffix=_after robotCenter=(-6.94, 1.44, -12.61) robotSize=(1.24, 1.86, 1.85)
+========== Scene Stats @ 2026-11-03 20:19:37 ==========
+scene=Assets/Scenes/Doosan-DT.unity  dirty=False
+gameObjects(total)=1476  activeTransforms=490
+meshRenderers=749 (active=282)  skinned=2
+roots=7
+cameras=3  lights=6  lightProbeGroups=0  reflectionProbes=0
+volumes=1
+--- roots ---
+  00_数字孪生机械臂  activeSelf=True  transforms=619  activeInHierarchy=235
+  20_漫游与训练  activeSelf=True  transforms=391  activeInHierarchy=97
+  30_界面与交互  activeSelf=True  transforms=86  activeInHierarchy=5
+  40_环境与灯光  activeSelf=True  transforms=307  activeInHierarchy=145
+  50_玩家与相机  activeSelf=True  transforms=67  activeInHierarchy=3
+  90_全局设置  activeSelf=True  transforms=4  activeInHierarchy=4
+  ~_外部引用保留  activeSelf=False  transforms=2  activeInHierarchy=1
+
+triangles(total)=2884871  triangles(active)=984136  distinctMeshes=191  distinctMaterials=35
+outlineComponents=162  enabled=5  enabledActive=3
+textures(Assets)=127  estUncompressedMemoryMB=221.9
+sceneFileMB=3.26
+
