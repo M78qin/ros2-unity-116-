@@ -22,7 +22,7 @@ namespace DigitalTwin.EditorTools
     public static class TwinUIRefineStage
     {
         private const string Tag = "[DOCK]";
-        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p6_refine";
+        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_refine";
         private const string EvidenceShots = EvidenceRoot + @"\shots";
         private const string WideShot = EvidenceShots + @"\thesis_fig4_15_ui_wide_1600.png";
 
@@ -63,7 +63,7 @@ namespace DigitalTwin.EditorTools
         public const string PendingKey = "TwinUiDockCheck.Pending";
         public const string LogPath = "Logs/ui_dock_check.txt";
         public const string JsonPath = "Logs/ui_dock_check.json";
-        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p6_refine";
+        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_refine";
         private const string EvidenceShots = EvidenceRoot + @"\shots";
         private const string EvidenceLogs = EvidenceRoot + @"\logs";
         private const string PerfId = TwinUiPerformanceModule.ModuleId;
@@ -547,7 +547,7 @@ namespace DigitalTwin.EditorTools
     public static class TwinUiWideCapture
     {
         public const string PendingKey = "TwinUiWideCapture.Pending";
-        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p6_refine";
+        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_refine";
         private const string ShotPath = EvidenceRoot + @"\shots\thesis_fig4_15_ui_wide_1600.png";
         private const string MetaPath = EvidenceRoot + @"\logs\ui44_wide_shot.txt";
         private const string PerfId = TwinUiPerformanceModule.ModuleId;

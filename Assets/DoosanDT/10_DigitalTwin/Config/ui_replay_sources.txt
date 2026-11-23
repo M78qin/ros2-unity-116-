@@ -1,0 +1,12 @@
+# ui_replay_sources.txt —— "换回放"可加载的额外 CSV 源清单（可选，只读）
+#
+# 用途：把**产品入口**（数字孪生页 SourceBar 的「换回放」/SetReplay）扩展到 PaperLogs 之外的
+#       真实 RT 原始 CSV（rt_raw_*）。不新建第二套数据链：仍然走
+#       TwinUiSourceSwitch.SetReplay -> TwinUiReplayFeed -> ReplayTwinUiDataSource（按表头识别 schema）。
+#
+# 格式：一行一个 CSV 绝对路径；空行与 # 开头的行为注释。列在前面的先被「换回放」轮到。
+# 说明：本文件只是"路径清单"，不含数据、不写盘、不改记录器；文件不存在/不可读时按缺失处理。
+#
+# 2026-11-09 fix1：下面两条是 a/INPUTS.csv 里的真实 RT 输入（46 列 / 40 列各一）。
+F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\cursor_2026-11-08_thesis_evidence\02_evidence\wsl_sessions\full\session_20261103_135616_529090_E4_B\raw\rt_raw_20261103_135625.csv
+\\wsl.localhost\Ubuntu-22.04\home\zyq\ros2_ws\src\docs\ros2-unity\logs\session_20260726_180656_E1_static_001_100hz\rt_raw_20260726_180710.csv

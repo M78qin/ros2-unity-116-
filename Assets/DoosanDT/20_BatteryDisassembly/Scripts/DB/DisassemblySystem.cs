@@ -272,6 +272,13 @@ public class DisassemblySystem : MonoBehaviour
     {
         if (!showDebugOverlay) return;
 
+        // P9 防御：面板对象可能为空（旧版会抛 NRE 并触发编辑器 Error Pause）。
+        if (_panelInitialized && _debugPanel == null)
+        {
+            _panelInitialized = false;
+            return;
+        }
+
         if (_panelInitialized)
         {
             _debugPanel.Draw((contentRect) => {

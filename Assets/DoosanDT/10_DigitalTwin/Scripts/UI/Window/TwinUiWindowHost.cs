@@ -47,11 +47,14 @@ namespace DigitalTwin.UI
         public const string LayoutPrefKey = "TwinUI.Window.Layout.v1";
         public const float DesignWidth = 1920f;
         public const float DesignHeight = 1080f;
-        public const float DefaultWidthRatio = 0.55f;
-        public const float DefaultHeightRatio = 0.92f;
+        public const float DefaultWidthRatio = 0.64f;
+        public const float DefaultHeightRatio = 0.88f;
         public const float DefaultMargin = 16f;
-        public const float MinWidth = 1080f;
-        public const float MinHeight = 620f;
+
+        // P7：最小尺寸从 1080×620 降到 720×480（"页面大小调整度低"的直接修法）。
+        // 内容 <860 走 Compact：单列卡片 + 页签换行 + 纵向滚动，不再裁切。
+        public const float MinWidth = 720f;
+        public const float MinHeight = 480f;
 
         // P3 起内容 1:1 渲染，不再存在"最小缩放"；保留常量仅为旧调用方/回归兼容（UI/30 已同步改断言）。
         public const float MinContentScale = 1.00f;
@@ -114,6 +117,34 @@ namespace DigitalTwin.UI
         public bool IsReady => _ready;
         public bool AllowsDrag => true;
         public bool AllowsMaximize => true;
+        public bool AllowsMinimize => true;
+        public bool AllowsHide => true;
+        public bool FrameOwnsTitleButtons => true;
+
+        /// <summary>可视状态变化（true=显示；任务栏/自检用）。</summary>
+        public event System.Action<bool> VisibilityChanged;
+
+        public bool IsVisible => _root != null && _root.gameObject.activeSelf;
+        public bool IsMinimized => _minimized;
+        public bool IsHidden => _hidden;
+
+        private bool _minimized;
+        private bool _hidden;
+        private TwinUiShellV2 _shellV2;
+        private float _bottomInset;
+
+        /// <summary>底部任务栏占位：窗口最大高度与默认高度都要让出这段（V2 设置，Legacy 为 0）。</summary>
+        public void SetBottomInset(float pixels)
+        {
+            _bottomInset = Mathf.Max(0f, pixels);
+        }
+
+        public float BottomInset => _bottomInset;
+
+        public TwinUiShellV2 ShellV2 => _shellV2;
+
+        /// <summary>可用画布高度（扣除底部任务栏）。</summary>
+        private float UsableHeight => Mathf.Max(200f, _canvasSize.y - _bottomInset);
 
         /// <summary>Frame 回调：拖拽开始（主窗当前无额外动作，保留给活动窗强调/日志）。</summary>
         public void OnFrameDragBegin()
@@ -221,6 +252,16 @@ namespace DigitalTwin.UI
                 return;
             }
 
+            // Desktop V2 is a screen workbench. Camera-space rendering can
+            // obscure TMP glyphs in this scene even while their meshes are valid.
+            // Keep world panels and active XR on their existing render path.
+            if (TwinUiShellMode.IsV2 && !UnityEngine.XR.XRSettings.isDeviceActive
+                && _canvas.renderMode == RenderMode.ScreenSpaceCamera)
+            {
+                _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                _canvas.worldCamera = null; // screen-point conversion must use no camera
+            }
+
             _canvasRect = _canvas.transform as RectTransform;
             if (_canvasRect == null)
             {
@@ -267,6 +308,13 @@ namespace DigitalTwin.UI
             // P3 响应式引擎：内容 1:1，按内容宽度三档重排（只改锚点/sizeDelta，不重建层级）。
             _responsive = _root.gameObject.AddComponent<TwinUiResponsiveLayout>();
             _responsive.Configure(this);
+
+            // P7：V2 浏览器式工作台（页签 + 卡片网格 + 浮窗 + 任务栏），全部运行时构建，零场景改动。
+            if (TwinUiShellMode.IsV2)
+            {
+                _shellV2 = TwinUiShellV2.Install(this);
+                Debug.Log("[WINDOW] shell V2 installed=" + (_shellV2 != null));
+            }
 
             _pendingBootstrap = false;
             _ready = true;
@@ -398,11 +446,11 @@ namespace DigitalTwin.UI
 
         // ------------------------------------------------------------- 布局
 
-        /// <summary>画布设计坐标下的默认窗口矩形：右停靠、宽 68%、高 92%、右边距 16、垂直居中。</summary>
+        /// <summary>画布设计坐标下的默认窗口矩形：右停靠、宽 64%、高 88%（扣底部任务栏）、右边距 16、垂直居中。</summary>
         public Rect DefaultRect()
         {
             float canvasW = Mathf.Max(1f, _canvasSize.x);
-            float canvasH = Mathf.Max(1f, _canvasSize.y);
+            float canvasH = Mathf.Max(1f, UsableHeight);
             float w = Mathf.Min(canvasW, Mathf.Max(MinWidth, canvasW * DefaultWidthRatio));
             float h = Mathf.Min(canvasH, Mathf.Max(MinHeight, canvasH * DefaultHeightRatio));
             float x = Mathf.Max(0f, canvasW - w - DefaultMargin);
@@ -434,7 +482,7 @@ namespace DigitalTwin.UI
         public Rect ClampRect(Rect rect)
         {
             float canvasW = Mathf.Max(1f, _canvasSize.x);
-            float canvasH = Mathf.Max(1f, _canvasSize.y);
+            float canvasH = Mathf.Max(1f, UsableHeight);
             float minW = Mathf.Min(MinWidth, canvasW);
             float minH = Mathf.Min(MinHeight, canvasH);
             float w = Mathf.Clamp(rect.width, minW, canvasW);
@@ -454,7 +502,7 @@ namespace DigitalTwin.UI
 
             if (maximized)
             {
-                rect = new Rect(0f, 0f, _canvasSize.x, _canvasSize.y);
+                rect = new Rect(0f, 0f, _canvasSize.x, UsableHeight);
             }
 
             ApplyLayoutCore(ClampRect(rect), maximized, saveLayout);
@@ -605,7 +653,7 @@ namespace DigitalTwin.UI
             if (value)
             {
                 _restoreRect = _rect;
-                ApplyLayout(new Rect(0f, 0f, _canvasSize.x, _canvasSize.y), true);
+                ApplyLayout(new Rect(0f, 0f, _canvasSize.x, UsableHeight), true);
             }
             else
             {
@@ -622,6 +670,55 @@ namespace DigitalTwin.UI
         public void ToggleMaximized()
         {
             SetMaximized(!_maximized);
+        }
+
+        // ------------------------------------------------------------- 最小化 / 隐藏（P7）
+
+        /// <summary>最小化：主窗收进底部任务栏（状态保留，不销毁内容）。</summary>
+        public void Minimize()
+        {
+            SetWindowVisible(false, true);
+        }
+
+        /// <summary>隐藏：关闭主窗显示；任务栏"主工作台"可恢复。</summary>
+        public void Hide()
+        {
+            SetWindowVisible(false, false);
+        }
+
+        public void Restore()
+        {
+            SetWindowVisible(true, false);
+        }
+
+        /// <summary>自检/任务栏用：显式设置可见性。</summary>
+        public void SetWindowVisible(bool visible, bool minimized)
+        {
+            if (!_ready)
+            {
+                return;
+            }
+
+            _minimized = !visible && minimized;
+            _hidden = !visible && !minimized;
+            if (_root != null)
+            {
+                _root.gameObject.SetActive(visible);
+            }
+
+            if (_frame != null)
+            {
+                _frame.SetDecorationsVisible(visible);
+            }
+
+            if (_sceneTint != null)
+            {
+                _sceneTint.gameObject.SetActive(visible && sceneTint);
+            }
+
+            VisibilityChanged?.Invoke(visible);
+            Debug.Log("[WINDOW] " + (visible ? "restore" : (minimized ? "minimize" : "hide"))
+                + " rect=" + DescribeRect(_rect) + " maximized=" + _maximized);
         }
 
         // ------------------------------------------------------------- 持久化

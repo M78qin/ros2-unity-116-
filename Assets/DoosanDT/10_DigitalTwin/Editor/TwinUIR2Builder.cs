@@ -307,11 +307,11 @@ namespace DigitalTwin.EditorTools
                 "由训练页面 PlayableDirector 驱动，本卡只做状态展示", TwinUIStyle.FontCaption, TwinUIStyle.MutedColor);
             TwinUIStyle.Row(tlState.rectTransform, 16f, 40f, 820f, 22f);
             TwinUIStyle.Button(timeline.rectTransform, "BtnPreview", "预览", TwinUIButton.Kind.Default,
-                new Vector2(16f, 76f), new Vector2(96f, 40f));
+                new Vector2(16f, -76f), new Vector2(96f, 40f));
             TwinUIStyle.Button(timeline.rectTransform, "BtnPlay", "播放", TwinUIButton.Kind.Primary,
-                new Vector2(120f, 76f), new Vector2(96f, 40f));
+                new Vector2(120f, -76f), new Vector2(96f, 40f));
             TwinUIStyle.Button(timeline.rectTransform, "BtnPause", "暂停", TwinUIButton.Kind.Default,
-                new Vector2(224f, 76f), new Vector2(96f, 40f));
+                new Vector2(224f, -76f), new Vector2(96f, 40f));
 
             var actions = TwinUIStyle.Frame(detail.rectTransform, "Actions");
             TwinUIStyle.Row(actions, 24f, 830f, 852f, 48f);
@@ -349,7 +349,7 @@ namespace DigitalTwin.EditorTools
             note.enableWordWrapping = true;
 
             TwinUIStyle.Button(eval.rectTransform, "BtnRoaming", TwinUITextR2.BtnBackRoaming, TwinUIButton.Kind.Default,
-                new Vector2(20f, 860f), new Vector2(200f, 44f), () => { });
+                new Vector2(20f, -860f), new Vector2(200f, 44f), () => { });
 
             return page;
         }

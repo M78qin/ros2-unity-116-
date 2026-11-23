@@ -38,16 +38,32 @@ namespace DigitalTwin.UI
             }
 
             public bool IsReady => true;
-            public bool AllowsDrag => true;
-            public bool AllowsMaximize => false;
+            public bool AllowsDrag => !_owner.IsMaximized;
+            public bool AllowsMaximize => _owner.AllowMaximize;
+            public bool AllowsMinimize => false;
+            public bool AllowsHide => false;
+            public bool FrameOwnsTitleButtons => false;
             public Canvas Canvas => _owner._canvas;
             public RectTransform CanvasRect => _owner._canvasRect;
             public RectTransform Content => null;
             public Rect WindowRect => _rect;
-            public bool IsMaximized => false;
+            public bool IsMaximized => _owner.IsMaximized;
+
+            public void Minimize()
+            {
+            }
+
+            public void Hide()
+            {
+            }
 
             public Vector2 MoveBy(Vector2 deltaCanvas)
             {
+                if (_owner.IsMaximized)
+                {
+                    return Vector2.zero;
+                }
+
                 var r = WindowRect;
                 SetBounds(new Rect(r.x + deltaCanvas.x, r.y + deltaCanvas.y, r.width, r.height));
                 _owner.NotifyDragMove();
@@ -56,6 +72,11 @@ namespace DigitalTwin.UI
 
             public Vector2 ResizeBy(TwinUiWindowEdge edge, Vector2 deltaCanvas)
             {
+                if (_owner.IsMaximized)
+                {
+                    return Vector2.zero;
+                }
+
                 Rect r = _rect;
                 float x = r.x;
                 float y = r.y;
@@ -139,7 +160,7 @@ namespace DigitalTwin.UI
 
             public void ToggleMaximized()
             {
-                // 悬浮窗不支持最大化（AllowsMaximize=false，按钮/F11/双击均不会走到这里）。
+                _owner.ToggleMaximizedWindow();
             }
 
             public void OnFrameDragBegin()
@@ -169,6 +190,8 @@ namespace DigitalTwin.UI
         private TMP_Text _title;
         private TwinUIButton _dockButton;
         private TwinUIButton _closeButton;
+        private RectTransform _controls;
+        private bool _closable;
         private string _moduleId;
         private bool _configured;
         private bool _snapped;
@@ -178,6 +201,24 @@ namespace DigitalTwin.UI
         private bool _hintActive;
         private Action _onDockAction;
         private Action _onCloseAction;
+
+        [Header("最大化（V2 起卡片浮窗可放大到画布）")]
+        [SerializeField] private bool allowMaximize = true;
+
+        private bool _maximized;
+        private Rect _restoreRect;
+        private TwinUIButton _maxButton;
+        private TMP_Text _maxLabel;
+
+        public bool AllowMaximize
+        {
+            get => allowMaximize;
+            set => allowMaximize = value;
+        }
+
+        public bool IsMaximized => _maximized;
+
+        public TwinUIButton MaxButton => _maxButton;
 
         public Rect WindowRect => _adapter != null ? _adapter.WindowRect : Rect.zero;
         public RectTransform WindowRoot => _window;
@@ -198,10 +239,11 @@ namespace DigitalTwin.UI
 
         public void Configure(string moduleId, string title, ITwinUiFrameHost mainHost, TwinUiWindowFrame template,
             Rect rect, bool expanded, Func<Rect> mainRectProvider, Action<bool> dockHintChanged,
-            Action onDock, Action onClose)
+            Action onDock, Action onClose, RectTransform layer = null, bool closable = false)
         {
             _moduleId = moduleId;
             _expanded = expanded;
+            _closable = closable;
             _mainRectProvider = mainRectProvider;
             _dockHintChanged = dockHintChanged;
             _onDockAction = onDock;
@@ -210,7 +252,7 @@ namespace DigitalTwin.UI
             _canvas = mainHost != null ? mainHost.Canvas : GetComponentInParent<Canvas>();
 
             _wrapper = (RectTransform)transform;
-            _wrapper.SetParent(_canvasRect, false);
+            _wrapper.SetParent(layer != null ? layer : _canvasRect, false);
             _wrapper.anchorMin = Vector2.zero;
             _wrapper.anchorMax = Vector2.one;
             _wrapper.offsetMin = Vector2.zero;
@@ -251,44 +293,44 @@ namespace DigitalTwin.UI
 
             _title = TwinUIStyle.Text(_window, "ModuleTitle", title, 14f, TwinUIStyle.TextColor,
                 TextAlignmentOptions.Left);
+            _title.enableWordWrapping = false;
+            _title.overflowMode = TextOverflowModes.Ellipsis;
             TwinUIStyle.Place(_title.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f),
                 new Vector2(14f, -9f), new Vector2(240f, 22f));
 
-            _dockButton = TwinUIStyle.Button(_window, "BtnDock", "停靠", TwinUIButton.Kind.Default,
-                Vector2.zero, new Vector2(72f, 24f),
-                new UnityEngine.Events.UnityAction(() =>
+            // P2：浮窗标题栏 = 独立水平布局容器（最大化 / 图钉 / 可选关闭），全部 28×28 图标。
+            _controls = TwinUiCardChrome.BuildCluster(_window, "WindowControls");
+            _controls.anchoredPosition = new Vector2(-TwinUIStyle.ControlRightMargin, -6f);
+            _maxButton = TwinUiCardChrome.AddIcon(_controls, "BtnMaximize", TwinUiIcon.Glyph.Maximize,
+                "最大化浮窗", ToggleMaximizedWindow);
+            _dockButton = TwinUiCardChrome.AddIcon(_controls, "BtnDock", TwinUiIcon.Glyph.PinOff,
+                "恢复停靠（回到卡片）", () =>
                 {
-                    if (onDock != null)
+                    if (_onDockAction != null)
                     {
-                        onDock();
+                        _onDockAction();
                     }
                     else
                     {
                         DockRequested?.Invoke();
                     }
-                }));
-            var dockRt = (RectTransform)_dockButton.transform;
-            dockRt.anchorMin = dockRt.anchorMax = new Vector2(1f, 1f);
-            dockRt.pivot = new Vector2(1f, 1f);
-            dockRt.anchoredPosition = new Vector2(-44f, -9f);
+                });
 
-            _closeButton = TwinUIStyle.Button(_window, "BtnClose", "×", TwinUIButton.Kind.Default,
-                Vector2.zero, new Vector2(24f, 24f),
-                new UnityEngine.Events.UnityAction(() =>
-                {
-                    if (onClose != null)
+            if (closable)
+            {
+                _closeButton = TwinUiCardChrome.AddIcon(_controls, "BtnClose", TwinUiIcon.Glyph.Close,
+                    "关闭卡片（保留数据）", () =>
                     {
-                        onClose();
-                    }
-                    else
-                    {
-                        CloseRequested?.Invoke();
-                    }
-                }));
-            var closeRt = (RectTransform)_closeButton.transform;
-            closeRt.anchorMin = closeRt.anchorMax = new Vector2(1f, 1f);
-            closeRt.pivot = new Vector2(1f, 1f);
-            closeRt.anchoredPosition = new Vector2(-10f, -9f);
+                        if (_onCloseAction != null)
+                        {
+                            _onCloseAction();
+                        }
+                        else
+                        {
+                            CloseRequested?.Invoke();
+                        }
+                    });
+            }
 
             TwinUITheme.Changed += OnThemeChanged;
             ApplyTheme();
@@ -334,6 +376,11 @@ namespace DigitalTwin.UI
                 _closeButton.ApplyTheme();
             }
 
+            if (_maxButton != null)
+            {
+                _maxButton.ApplyTheme();
+            }
+
             if (_frame != null)
             {
                 _frame.ApplyTheme();
@@ -353,6 +400,11 @@ namespace DigitalTwin.UI
             float canvasH = _canvasRect.rect.height;
             _window.anchoredPosition = new Vector2(rect.x, -(canvasH - rect.y - rect.height));
             _window.sizeDelta = new Vector2(rect.width, rect.height);
+            if (_title != null)
+            {
+                _title.rectTransform.sizeDelta = new Vector2(Mathf.Max(80f, rect.width - 106f), 22f);
+            }
+
             if (_frame != null)
             {
                 _frame.OnHostLayout(rect, 1f);
@@ -391,6 +443,54 @@ namespace DigitalTwin.UI
 
             _adapter.ResizeBy(edge, deltaCanvas);
             _adapter.SaveLayout();
+        }
+
+        // ------------------------------------------------------------- 最大化（V2）
+
+        // 最大化按钮在 Configure 的控件集群里创建（28×28 图标），此处不再单独建。
+
+        /// <summary>放大到画布（留 12px 边距），再点还原；放大时禁止拖动/缩放。</summary>
+        public void ToggleMaximizedWindow()
+        {
+            if (!allowMaximize || _adapter == null || _canvasRect == null)
+            {
+                return;
+            }
+
+            if (_maximized)
+            {
+                _maximized = false;
+                Rect back = _restoreRect;
+                back.width = Mathf.Max(MinWidth, back.width);
+                back.height = Mathf.Max(MinHeight, back.height);
+                _adapter.SetBounds(back);
+            }
+            else
+            {
+                _restoreRect = _adapter.WindowRect;
+                _maximized = true;
+                Rect c = _canvasRect.rect;
+                _adapter.SetBounds(new Rect(12f, 12f, Mathf.Max(MinWidth, c.width - 24f),
+                    Mathf.Max(MinHeight, c.height - 24f)));
+            }
+
+            UpdateMaxButton();
+            _adapter.SaveLayout();
+        }
+
+        private void UpdateMaxButton()
+        {
+            if (_maxButton != null)
+            {
+                TwinUiCardChrome.SetGlyph(_maxButton,
+                    _maximized ? TwinUiIcon.Glyph.Restore : TwinUiIcon.Glyph.Maximize,
+                    _maximized ? "还原浮窗" : "最大化浮窗");
+            }
+
+            if (_maxLabel != null)
+            {
+                _maxLabel.text = _maximized ? "还原" : "最大";
+            }
         }
 
         /// <summary>贴边吸附：左/右/上 24px 内贴齐；返回是否吸附。</summary>

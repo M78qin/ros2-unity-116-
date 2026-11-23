@@ -111,7 +111,12 @@ namespace DigitalTwin.UI
 
             var s = binder.Current;
 
-            Set(_sourceValue, s.Connected ? s.SourceName : TwinUITextR2.NoConnection);
+            Set(_sourceValue, s.Connected ? (s.IsReplay ? "回放 · " : "实时 · ") + s.SourceName : TwinUITextR2.NoConnection);
+            if (_sourceValue != null) {
+                _sourceValue.enableWordWrapping = false;
+                _sourceValue.overflowMode = TextOverflowModes.Ellipsis;
+                _sourceValue.margin = new Vector4(0,0,16,0);
+            }
             Set(_rateValue, s.Hz > 0.01 ? s.Hz.ToString("F1") + " Hz" : "—");
             Set(_latencyValue, s.HasFrame ? s.LatencyMs.ToString("F1") + " ms" : "—");
             Set(_ageValue, s.HasFrame ? s.AgeMs.ToString("F0") + " ms" : "—");

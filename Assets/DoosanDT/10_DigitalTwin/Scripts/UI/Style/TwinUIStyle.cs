@@ -40,6 +40,10 @@ namespace DigitalTwin.UI
         public static Color LineStrongColor => P.LineStrong;
         public static Color StrongColor => P.Strong;
         public static Color ShadowColor => P.Shadow;
+
+        // P7 追加令牌（V3.1 原型 --ui-panel3 / --quiet）：悬停抬升表面与三级文字。
+        public static Color Panel3Color => P.Panel3;
+        public static Color QuietColor => P.Quiet;
         public static float UiScale => P.UiScale <= 0f ? 1f : P.UiScale;
         public static readonly Color Transparent = new Color(0f, 0f, 0f, 0f);
 
@@ -74,6 +78,50 @@ namespace DigitalTwin.UI
         public const float FontBody = 16f;
         public const float FontCaption = 13f;
         public const float FontMono = 16f;
+
+        // ---- P7 字阶（浏览器式工作台专用；上述旧常量保留不动，避免一次性拖崩 legacy 页）----
+        // 依据 V3.1 原型实测（1080p）：页标题 20 / 卡片标题 13 / 数值 22 / 单位 11 / 正文 13。
+        public const float FontPageTitle = 20f;
+        public const float FontCardTitle = 14f;
+        public const float FontStat = 22f;
+        public const float FontUnit = 11f;
+        public const float FontBodySm = 13f;
+        public const float FontKicker = 11f;
+
+        // ---- P7 间距/尺寸（8px 栅格）----
+        public const float Space4 = 4f;
+        public const float Space8 = 8f;
+        public const float Space12 = 12f;
+        public const float Space16 = 16f;
+        public const float Space24 = 24f;
+
+        public const float RadiusCardV2 = 12f;
+        public const float CardHeaderHeight = 36f;
+        public const float CardPad = 12f;
+        public const float TabBarV2Height = 32f;
+        public const float ToolbarV2Height = 32f;
+        public const float TaskbarV2Height = 34f;
+        public const float PagePadX = 16f;
+        public const float PagePadTop = 14f;
+
+        // ---- V2 工作台顶栏统一度量（P1）----
+        /// <summary>Header / 页签 / 工具栏统一左右内边距。</summary>
+        public const float WorkbenchPadX = 16f;
+
+        /// <summary>主窗右上 3 个图标按钮占位：8 边距 + 3×28 + 2×4。</summary>
+        public const float WorkbenchRightInset = 104f;
+
+        /// <summary>Header 盒高 = 标题行 28 + 行距 8 + chips 行 36 + 底 8。</summary>
+        public const float WorkbenchHeaderHeight = 88f;
+
+        public const float WorkbenchTitleRowHeight = 28f;
+        public const float WorkbenchChipRowHeight = 36f;
+        public const float WorkbenchRowGap = 8f;
+
+        // ---- 子卡片/浮窗 标题栏图标控件统一度量（P2）----
+        public const float ControlButtonSize = 28f;
+        public const float ControlButtonGap = 4f;
+        public const float ControlRightMargin = 8f;
 
         // ---- 基础件 ------------------------------------------------------
 

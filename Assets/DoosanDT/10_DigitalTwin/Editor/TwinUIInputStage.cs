@@ -40,7 +40,7 @@ namespace DigitalTwin.EditorTools
         public const string CameraPath = "50_玩家与相机/player/Main Camera";
         public const string DuplicateEventSystemName = "EventSystem (DT_禁用)";
         public const string RenamedEventSystemName = "EventSystem_DISABLED_DO_NOT_ENABLE";
-        public const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-05_p1b_input";
+        public const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_input";
         public const string EvidenceShots = EvidenceRoot + @"\shots\ui28";
         public const string StageLogPath = "Logs/ui_input_stage.txt";
         public const string CheckLogPath = "Logs/ui_input_check.txt";

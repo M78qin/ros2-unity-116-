@@ -49,11 +49,9 @@ namespace DigitalTwin
             }
 
             _modeService?.EnterPlan();
-            RobotCommandResult modeResult = _command == null
-                ? new RobotCommandResult(false, false, "ERROR", "TwinCommandController is unavailable.")
-                : _command.EnterDartControlMode();
-            SetStatus(modeResult.Success ? "PLAN" : modeResult.Status, modeResult.ErrorMessage);
-            return modeResult.Success;
+            _command?.SetLocalMode(TwinMode.Plan);
+            SetStatus("PLAN", string.Empty);
+            return true;
         }
 
         public void UpdateGhostTarget(float[] targetJointRad)
@@ -100,7 +98,7 @@ namespace DigitalTwin
             _planningStartFrame = null;
             _targetJointRad = null;
             ReleasePreviewToLive();
-            _command?.StopDartTask();
+            _command?.SetLocalMode(TwinMode.Sync);
             _modeService?.EnterMirror();
             SetStatus("MIRROR", string.Empty);
         }

@@ -26,7 +26,7 @@ namespace DigitalTwin.EditorTools
         private const string StageLogPath = "Logs/ui_module_stage.txt";
         private const string CheckLogPath = "Logs/ui_module_check.txt";
         private const string CheckJsonPath = "Logs/ui_module_check.json";
-        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p4_modules";
+        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_modules";
         private const string EvidenceShots = EvidenceRoot + @"\shots";
         private const string EvidenceLogs = EvidenceRoot + @"\logs";
 
@@ -206,7 +206,7 @@ namespace DigitalTwin.EditorTools
         private const string PerfId = TwinUiPerformanceModule.ModuleId;
         private const string LogPath = "Logs/ui_module_check.txt";
         private const string JsonPath = "Logs/ui_module_check.json";
-        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p4_modules";
+        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_modules";
         private const string EvidenceShots = EvidenceRoot + @"\shots";
         private const string EvidenceLogs = EvidenceRoot + @"\logs";
 

@@ -587,6 +587,13 @@ public class PerformanceProfiler : MonoBehaviour
 
         private void OnGUI()
     {
+        // P9 防御：面板对象可能在域重载/接管切换后为空（旧版会在这里抛 NRE 并触发编辑器 Error Pause）。
+        if (_panelInitialized && _performancePanel == null)
+        {
+            _panelInitialized = false;
+            return;
+        }
+
         if (_panelInitialized)
         {
             _performancePanel.Draw((contentRect) => {

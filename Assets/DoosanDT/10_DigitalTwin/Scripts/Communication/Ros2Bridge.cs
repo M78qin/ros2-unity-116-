@@ -33,8 +33,8 @@ namespace DigitalTwin
         [SerializeField, Tooltip("是否在运行时自动查找/创建 ROSConnection。")]
         private bool autoResolveRosConnection = true;
 
-        [SerializeField, Tooltip("Win11→WSL2 联调 TCP 地址。WSL2 endpoint 监听 0.0.0.0:10002 时 Unity 用 127.0.0.1。")]
-        private string rosTcpHost = "127.0.0.1";
+        [SerializeField, Tooltip("Win11→VMware NAT 联调 TCP 地址。Guest endpoint 监听 0.0.0.0:10002；Unity Client 指向 VM NAT IP。")]
+        private string rosTcpHost = "192.168.205.128";
 
         [SerializeField] private int rosTcpPort = 10002;
 
@@ -127,6 +127,12 @@ namespace DigitalTwin
         private string motionCmdTopic = "/dt/cmd/motion";
         [SerializeField] private string haltTopic = "/dt/cmd/halt";
         [SerializeField] private string sessionTopic = "/dt/cmd/session";
+        [SerializeField, Tooltip("规划请求（plan only；本组节点不下发运动）")]
+        private string planRequestTopic = "/dt/cmd/plan_request";
+        [SerializeField, Tooltip("规划状态命令 accept/start/cancel（仍不下发运动）")]
+        private string planCommandTopic = "/dt/cmd/plan_command";
+        [SerializeField, Tooltip("规划/轨迹/反馈契约状态 JSON")]
+        private string planStatusTopic = "/dt/status/plan";
         [SerializeField, Tooltip("Doosan namespace prefix for rt_topic subscriptions, e.g. dsr01")]
         private string robotNamespace = "dsr01";
         [SerializeField, Tooltip("Optional run_id copied into Unity paper logs when ROS2 state packets do not carry one.")]
@@ -178,6 +184,9 @@ namespace DigitalTwin
         private readonly ConcurrentQueue<PendingLatencyPong> _pendingLatencyPongs = new ConcurrentQueue<PendingLatencyPong>();
         private TwinPaperRecorder _paperRecorder;
         private long _droppedLatencyPongs;
+        private readonly object _planStatusLock = new object();
+        private string _planStatusJson = string.Empty;
+        private long _planStatusReceiveNs;
 
         public bool IsRunning => _running;
         public Ros2SessionStatus LatestSessionStatus
@@ -298,6 +307,58 @@ namespace DigitalTwin
         public string ModeStatusTopic => modeStatusTopic;
         public string MotionStatusTopic => motionStatusTopic;
         public string SessionStatusTopic => sessionStatusTopic;
+        public string PlanRequestTopic => planRequestTopic;
+        public string PlanCommandTopic => planCommandTopic;
+        public string PlanStatusTopic => planStatusTopic;
+
+        public bool HasPlanStatus
+        {
+            get
+            {
+                lock (_planStatusLock)
+                {
+                    return !string.IsNullOrEmpty(_planStatusJson);
+                }
+            }
+        }
+
+        public string LatestPlanStatusJson
+        {
+            get
+            {
+                lock (_planStatusLock)
+                {
+                    return _planStatusJson;
+                }
+            }
+        }
+
+        public long PlanStatusReceiveNs
+        {
+            get
+            {
+                lock (_planStatusLock)
+                {
+                    return _planStatusReceiveNs;
+                }
+            }
+        }
+
+        // ---- P0-F2/F3: 远端停止确认的可观测面（2026-11-18） ----
+        // 停止请求在本类（SendHalt -> /dt/cmd/halt, std_msgs/Bool）；远端是否受理只由 ROS2 回传的
+        // /dt/status/motion 反映。这里把"发了几次 HALT"与"收到什么 motion 状态、何时收到"分开暴露，
+        // 便于 UI 与测试分别断言，不把"本地闩锁"和"远端停止"混成一条。
+        private long _haltPublishCount;
+        private long _motionStatusReceiveNs;
+
+        /// <summary>本进程内成功投递到 /dt/cmd/halt 的次数（每次 SendHalt 成功 +1）。</summary>
+        public long HaltPublishCount => Interlocked.Read(ref _haltPublishCount);
+
+        /// <summary>最近一条 /dt/status/motion 的接收时刻（SystemClock.NowNs，0=从未收到）。</summary>
+        public long MotionStatusReceiveNs => Interlocked.Read(ref _motionStatusReceiveNs);
+
+        /// <summary>收到 /dt/status/motion 时触发：(motionState, receiveNs)。</summary>
+        public event Action<string, long> MotionStatusChanged;
         public string LatencyPingTopic => latencyPingTopic;
         public string LatencyPongTopic => latencyPongTopic;
         public long DroppedLatencyPongs => Interlocked.Read(ref _droppedLatencyPongs);
@@ -370,7 +431,40 @@ namespace DigitalTwin
             {
                 EnsureRosConnection();
                 EnsureCommandPublishers();
+                TwinRosPublishProbe.CountCommand(sessionTopic);
                 _ros.Publish(sessionTopic, new StringMsg { data = json });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _lastError = ex.Message;
+                return false;
+            }
+        }
+
+        public bool PublishPlanRequest(string json)
+        {
+            return PublishPlanString(planRequestTopic, json);
+        }
+
+        public bool PublishPlanCommand(string json)
+        {
+            return PublishPlanString(planCommandTopic, json);
+        }
+
+        private bool PublishPlanString(string topic, string json)
+        {
+            if (string.IsNullOrWhiteSpace(topic) || string.IsNullOrWhiteSpace(json))
+            {
+                return false;
+            }
+
+            try
+            {
+                EnsureRosConnection();
+                EnsureCommandPublishers();
+                TwinRosPublishProbe.CountPlan(topic);
+                _ros.Publish(topic, new StringMsg { data = json });
                 return true;
             }
             catch (Exception ex)
@@ -636,6 +730,7 @@ namespace DigitalTwin
             {
                 EnsureRosConnection();
                 EnsureCommandPublishers();
+                TwinRosPublishProbe.CountCommand(setModeTopic);
                 _ros.Publish(setModeTopic, new StringMsg(mode));
                 LogVerbose($"Publish set_mode topic={setModeTopic} mode={mode}");
                 return SetCommandResult(true, false, "SENT", string.Empty);
@@ -672,6 +767,7 @@ namespace DigitalTwin
                 EnsureRosConnection();
                 EnsureCommandPublishers();
                 string json = BuildMotionJson("move_joint", "absolute", targetDeg, null, vel);
+                TwinRosPublishProbe.CountMotion(motionCmdTopic);
                 _ros.Publish(motionCmdTopic, new StringMsg(json));
                 LogVerbose($"Publish motion absolute vel={vel:0.#}% topic={motionCmdTopic}");
                 return SetCommandResult(true, false, "SENT", string.Empty);
@@ -701,6 +797,7 @@ namespace DigitalTwin
                 EnsureRosConnection();
                 EnsureCommandPublishers();
                 string json = BuildMotionJson("move_joint", "relative", null, deltaDeg, vel);
+                TwinRosPublishProbe.CountMotion(motionCmdTopic);
                 _ros.Publish(motionCmdTopic, new StringMsg(json));
                 LogVerbose($"Publish motion relative vel={vel:0.#}% topic={motionCmdTopic}");
                 return SetCommandResult(true, false, "SENT", string.Empty);
@@ -755,6 +852,7 @@ namespace DigitalTwin
                     points = new[] { point }
                 };
 
+                TwinRosPublishProbe.CountCommand(moveJointTopic);
                 _ros.Publish(moveJointTopic, msg);
                 LogVerbose($"Publish move_joint topic={moveJointTopic} joints={jointCount} duration={durationSec:0.###}s");
                 return SetCommandResult(true, false, "SENT", string.Empty);
@@ -777,7 +875,9 @@ namespace DigitalTwin
             {
                 EnsureRosConnection();
                 EnsureCommandPublishers();
+                TwinRosPublishProbe.CountCommand(haltTopic);
                 _ros.Publish(haltTopic, new BoolMsg(true));
+                Interlocked.Increment(ref _haltPublishCount);
                 LogVerbose($"Publish halt topic={haltTopic}");
                 return SetCommandResult(true, false, "SENT", string.Empty);
             }
@@ -990,6 +1090,7 @@ namespace DigitalTwin
                     else
                     {
                         TryRegisterPublisher<StringMsg>(latencyPongTopic);
+                        TwinRosPublishProbe.CountCommand(latencyPongTopic);
                         _ros.Publish(latencyPongTopic, new StringMsg { data = pongJson });
                     }
                 }
@@ -1181,6 +1282,11 @@ namespace DigitalTwin
             {
                 _ros.Subscribe<StringMsg>(sessionStatusTopic, OnSessionStatus);
             }
+
+            if (!_ros.HasSubscriber(planStatusTopic))
+            {
+                _ros.Subscribe<StringMsg>(planStatusTopic, OnPlanStatus);
+            }
         }
 
         private void EnsureLatencyProtocolTopics()
@@ -1208,6 +1314,8 @@ namespace DigitalTwin
             TryRegisterPublisher<StringMsg>(motionCmdTopic);
             TryRegisterPublisher<BoolMsg>(haltTopic);
             TryRegisterPublisher<StringMsg>(sessionTopic);
+            TryRegisterPublisher<StringMsg>(planRequestTopic);
+            TryRegisterPublisher<StringMsg>(planCommandTopic);
             TryRegisterPublisher<StringMsg>(latencyPongTopic);
             _publishersRegistered = CommandPublishersReady();
         }
@@ -1324,6 +1432,22 @@ namespace DigitalTwin
             }
         }
 
+        private void OnPlanStatus(StringMsg msg)
+        {
+            if (msg == null || string.IsNullOrWhiteSpace(msg.data))
+            {
+                return;
+            }
+
+            // Plan status is contract JSON; TwinPlanContract parses it.  Store the
+            // raw text so a parse failure is visible instead of silently dropped.
+            lock (_planStatusLock)
+            {
+                _planStatusJson = msg.data;
+                _planStatusReceiveNs = SystemClock.NowNs();
+            }
+        }
+
         private void OnMotionStatus(StringMsg msg)
         {
             if (msg == null)
@@ -1345,6 +1469,22 @@ namespace DigitalTwin
             {
                 _motion = string.IsNullOrWhiteSpace(motion) ? _motion : motion;
                 _motionError = error;
+            }
+
+            // P0-F3: 把"远端回过什么状态"作为独立证据广播出去；闩锁是否可解除由 TwinCommandController 判定。
+            long receiveNs = SystemClock.NowNs();
+            Interlocked.Exchange(ref _motionStatusReceiveNs, receiveNs);
+            Action<string, long> handler = MotionStatusChanged;
+            if (handler != null)
+            {
+                try
+                {
+                    handler(_motion, receiveNs);
+                }
+                catch (Exception ex)
+                {
+                    _lastError = ex.Message;
+                }
             }
         }
 

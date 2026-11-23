@@ -25,7 +25,7 @@ namespace DigitalTwin.EditorTools
     {
         private const string Tag = "[FLOAT]";
         private const string ScenePath = "Assets/Scenes/Doosan-DT.unity";
-        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p5_floating";
+        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_floating";
         private const string EvidenceShots = EvidenceRoot + @"\shots";
         private const string EvidenceLogs = EvidenceRoot + @"\logs";
         private const string ThesisShot = EvidenceShots + @"\thesis_fig4_15_ui_1920.png";
@@ -67,7 +67,7 @@ namespace DigitalTwin.EditorTools
         public const string PendingKey = "TwinUiFloatingCheck.Pending";
         public const string LogPath = "Logs/ui_floating_check.txt";
         public const string JsonPath = "Logs/ui_floating_check.json";
-        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p5_floating";
+        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_floating";
         private const string EvidenceShots = EvidenceRoot + @"\shots";
         private const string EvidenceLogs = EvidenceRoot + @"\logs";
         private const string PerfId = TwinUiPerformanceModule.ModuleId;
@@ -719,7 +719,7 @@ namespace DigitalTwin.EditorTools
     public static class TwinUiThesisCapture
     {
         public const string PendingKey = "TwinUiThesisCapture.Pending";
-        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p5_floating";
+        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_floating";
         private const string ThesisShot = EvidenceRoot + @"\shots\thesis_fig4_15_ui_1920.png";
         private const string MetaPath = EvidenceRoot + @"\logs\ui40_thesis_shot.txt";
         private const string PerfId = TwinUiPerformanceModule.ModuleId;

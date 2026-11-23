@@ -23,7 +23,7 @@ namespace DigitalTwin.EditorTools
         private const string Tag = "[PERF]";
         private const string BuildDir = @"Builds\p6_perf";
         private const string ExeName = "TwinUI_P6_Perf.exe";
-        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p6_refine";
+        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_player_build";
         private const string PerfDir = EvidenceRoot + @"\perf";
 
         public static string ExePath => Path.Combine(Directory.GetCurrentDirectory(), BuildDir, ExeName);
@@ -141,7 +141,7 @@ namespace DigitalTwin.EditorTools
     public static class TwinUIEditorPerfStage
     {
         public const string PendingKey = "TwinUIEditorPerf.Pending";
-        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p6_refine\perf";
+        private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_player_build\perf";
         private const string LogPath = "Logs/ui45_editor_perf.txt";
         private const float DurationSeconds = 60f;
         private static readonly List<float> Fps = new List<float>();
@@ -321,7 +321,7 @@ namespace DigitalTwin.EditorTools
 public static class TwinUIPlayerPerfStage
 {
     private const string Tag = "[PERF]";
-    private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p6_refine\perf";
+    private const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_player_build\perf";
     private const string LogPath = "Logs/ui43_player_perf.txt";
     private const float RunSeconds = 70f;
     private static Process _process;

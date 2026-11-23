@@ -41,6 +41,9 @@ namespace DigitalTwin.UI
         private RectTransform _header;
         private TwinUIButton _maxButton;
         private TMP_Text _maxLabel;
+        private bool _maxIconMode;
+        private TwinUIButton _minButton;
+        private TwinUIButton _hideButton;
 
         private int _mode; // 0=idle, 1=drag, 2=resize
         private TwinUiWindowEdge _resizeEdge;
@@ -74,6 +77,7 @@ namespace DigitalTwin.UI
 
             BuildResizeHandles();
             BuildMaxButton();
+            BuildMinimizeButtons();
             BuildWindowChrome();
             TwinUITheme.Changed += OnThemeChanged;
             _mode = 0;
@@ -135,9 +139,29 @@ namespace DigitalTwin.UI
                 _maxLabel.text = maximized ? "REST" : "MAX";
             }
 
+            if (_maxIconMode && _maxButton != null)
+            {
+                TwinUiIcon.SetButtonGlyph(_maxButton, maximized ? TwinUiIcon.Glyph.Restore : TwinUiIcon.Glyph.Maximize);
+                TwinUiTooltip.Attach(_maxButton.gameObject, maximized ? "还原工作台" : "最大化工作台");
+            }
+
             if (_maxButton != null)
             {
                 _maxButton.SetSelected(maximized);
+            }
+        }
+
+        /// <summary>P7：最小化/隐藏时连带隐藏外阴影与标题栏底（它们挂在画布上，不在窗口根下）。</summary>
+        public void SetDecorationsVisible(bool visible)
+        {
+            if (_shadow != null)
+            {
+                _shadow.gameObject.SetActive(visible && _host != null && !_host.IsMaximized);
+            }
+
+            if (_titleBand != null)
+            {
+                _titleBand.gameObject.SetActive(visible);
             }
         }
 
@@ -495,7 +519,7 @@ namespace DigitalTwin.UI
 
             if (_shadow != null)
             {
-                _shadow.color = TwinUIStyle.ShadowColor;
+                _shadow.color = TwinUIStyle.Alpha(TwinUIStyle.ShadowColor, 0.16f);
             }
 
             if (_accentOutline != null)
@@ -515,6 +539,16 @@ namespace DigitalTwin.UI
             {
                 _maxButton.ApplyTheme();
                 _maxButton.SetSelected(_host != null && _host.IsMaximized);
+            }
+
+            if (_minButton != null)
+            {
+                _minButton.ApplyTheme();
+            }
+
+            if (_hideButton != null)
+            {
+                _hideButton.ApplyTheme();
             }
         }
 
@@ -575,7 +609,7 @@ namespace DigitalTwin.UI
             // 外阴影：半透明圆角 Image，挂在 Canvas 上、作为 UiWindowRoot 的前一个兄弟（不参与射线）。
             if (_shadow == null && _host != null && _host.CanvasRect != null)
             {
-                _shadow = TwinUIStyle.Panel(_host.CanvasRect, "UiWindowShadow", TwinUIStyle.ShadowColor);
+                _shadow = TwinUIStyle.Panel(_host.CanvasRect, "UiWindowShadow", TwinUIStyle.Alpha(TwinUIStyle.ShadowColor, 0.16f));
                 _shadow.raycastTarget = false;
                 _shadow.sprite = TwinUiWindowHost.RoundedWindowSprite();
                 _shadow.type = Image.Type.Sliced;
@@ -605,8 +639,8 @@ namespace DigitalTwin.UI
                 if (show)
                 {
                     var srt = _shadow.rectTransform;
-                    srt.anchoredPosition = new Vector2(rect.x - 18f, rect.y - 26f);
-                    srt.sizeDelta = new Vector2(rect.width + 36f, rect.height + 48f);
+                    srt.anchoredPosition = new Vector2(rect.x - 5f, rect.y - 8f);
+                    srt.sizeDelta = new Vector2(rect.width + 10f, rect.height + 13f);
                     srt.SetSiblingIndex(Mathf.Max(0, _rt.GetSiblingIndex() - 1));
                 }
             }
@@ -732,8 +766,24 @@ namespace DigitalTwin.UI
 
         private void BuildMaxButton()
         {
-            if (_rt == null || (_host != null && !_host.AllowsMaximize))
+            if (_rt == null || (_host != null && (!_host.FrameOwnsTitleButtons || !_host.AllowsMaximize)))
             {
+                return;
+            }
+
+            if (TwinUiShellMode.IsV2)
+            {
+                _maxButton = TwinUiIcon.CreateIconButton(_rt, "BtnWindowMax", TwinUiIcon.Glyph.Maximize,
+                    TwinUIStyle.ControlButtonSize, ToggleMaximize);
+                var irt = (RectTransform)_maxButton.transform;
+                irt.anchorMin = irt.anchorMax = new Vector2(1f, 1f);
+                irt.pivot = new Vector2(1f, 1f);
+                irt.anchoredPosition = new Vector2(-TwinUIStyle.ControlRightMargin, -8f);
+                TwinUiTooltip.Attach(_maxButton.gameObject, "最大化工作台");
+                TwinUiIcon.SetTint(_maxButton, TwinUIStyle.MutedColor, TwinUIStyle.TextColor);
+                _maxIconMode = true;
+                _maxLabel = null;
+                TwinUiRadii.Apply(_maxButton.transform);
                 return;
             }
 
@@ -763,6 +813,93 @@ namespace DigitalTwin.UI
 
             _maxButton = view;
             _maxLabel = label;
+        }
+
+        /// <summary>P7：主窗标题栏左侧补"最小化 / 隐藏"两个按钮（悬浮窗自己管理标题栏按钮，不生成）。</summary>
+        private void BuildMinimizeButtons()
+        {
+            if (_rt == null || _host == null || !_host.FrameOwnsTitleButtons)
+            {
+                return;
+            }
+
+            if (TwinUiShellMode.IsV2)
+            {
+                float x = -TwinUIStyle.ControlRightMargin - TwinUIStyle.ControlButtonSize
+                    - TwinUIStyle.ControlButtonGap;
+                if (_host.AllowsMinimize)
+                {
+                    _minButton = CreateIconTitleButton("BtnWindowMin", TwinUiIcon.Glyph.Minimize, x,
+                        () => _host.Minimize(), "最小化到悬浮球");
+                    x -= TwinUIStyle.ControlButtonSize + TwinUIStyle.ControlButtonGap;
+                }
+
+                if (_host.AllowsHide)
+                {
+                    _hideButton = CreateIconTitleButton("BtnWindowHide", TwinUiIcon.Glyph.Close, x,
+                        () => _host.Hide(), "隐藏工作台（悬浮球恢复）");
+                }
+
+                return;
+            }
+
+            if (_host.AllowsMinimize)
+            {
+                _minButton = CreateTitleButton("BtnWindowMin", "最小", new Vector2(-54f, -6f),
+                    () => _host.Minimize());
+            }
+
+            if (_host.AllowsHide)
+            {
+                _hideButton = CreateTitleButton("BtnWindowHide", "隐藏", new Vector2(-100f, -6f),
+                    () => _host.Hide());
+            }
+        }
+
+        /// <summary>P2：V2 主窗标题栏图标按钮（28×28，与子卡片/浮窗控件同一度量）。</summary>
+        private TwinUIButton CreateIconTitleButton(string name, TwinUiIcon.Glyph glyph, float x,
+            UnityEngine.Events.UnityAction action, string tooltip)
+        {
+            TwinUIButton view = TwinUiIcon.CreateIconButton(_rt, name, glyph,
+                TwinUIStyle.ControlButtonSize, action);
+            var rt = (RectTransform)view.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(1f, 1f);
+            rt.anchoredPosition = new Vector2(x, -8f);
+            TwinUiTooltip.Attach(view.gameObject, tooltip);
+            TwinUiIcon.SetTint(view, TwinUIStyle.MutedColor, TwinUIStyle.TextColor);
+            TwinUiRadii.Apply(rt);
+            return view;
+        }
+
+        private TwinUIButton CreateTitleButton(string name, string label, Vector2 position,
+            UnityEngine.Events.UnityAction action)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button),
+                typeof(TwinUIButton));
+            var rt = go.GetComponent<RectTransform>();
+            rt.SetParent(_rt, false);
+            rt.anchorMin = new Vector2(1f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(1f, 1f);
+            rt.anchoredPosition = position;
+            rt.sizeDelta = maxButtonSize;
+
+            var img = go.GetComponent<Image>();
+            img.raycastTarget = true;
+
+            var button = go.GetComponent<Button>();
+            button.transition = Selectable.Transition.None;
+            button.targetGraphic = img;
+
+            var view = go.GetComponent<TwinUIButton>();
+            TMP_Text text = TwinUIStyle.Text(rt, "Label", label, 11f, TwinUIStyle.MutedColor,
+                TextAlignmentOptions.Center);
+            TwinUIStyle.Stretch(text.rectTransform, 2f, 0f, 2f, 0f);
+            view.Setup(img, button, text, TwinUIButton.Kind.Plain, null);
+            button.onClick.AddListener(action);
+            TwinUiRadii.Apply(rt);
+            return view;
         }
     }
 

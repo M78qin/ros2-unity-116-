@@ -13,6 +13,47 @@
 
 ---
 
+## 2026-11-07 02:35 · DSH-Agent · P9.5 卡片网页式缩放 + 多色折线 + 入口/硬锁/拖出/双端适配
+
+- 用户三点新要求：①卡片随面板像网页一样缩放（最小一列，变宽 2/3/4 列）②推荐项与"没做的"继续推进（欢迎页并卡、执行硬锁、拖出、悬浮球吸附、VR/多显示器先适配）③卡内折线/力矩要美观、多颜色。
+- 缩放：`TwinUiCardGrid` 改为"设计尺寸 + localScale"模型（列数 760/1160/1560，scale 0.62–1.40，单卡视觉宽 ≤468，行对齐/整行居中）；浮窗用 `TwinUiDesignScaler` 等比居中；实测 720 单列 1.376、900 两列 1.262、1200 三列 1.127、1600 四列 1.134。
+- 折线：新增 `TwinUiLineChart`（6 序列、SeriesColors、autoRange、阈值虚线、富文本图例、空态、顶点复用）+ `TwinUiLineChartBuffer`；力矩卡/关节角卡各 6 条彩线 + 2×3 数值网格色点，4 Hz、96 点缓冲。
+- 入口：`welcome` 卡并入总览（项目名/版本/模式/数据源/工作区/退出），欢迎页不再单独弹层。
+- 硬锁：`TwinUiCommandGate` 三重门（本卡授权[仅本次 Play] + `enableRealRobotCommand` + 未急停），执行按钮默认不可点并显示原因；离页自动收回。
+- 拖出：`TwinUiCardDragOut`（标题栏拖出 ≥120 px 且离开主窗 → 同一 `Detach` 路径）；悬浮球 24 px/0.18 s 吸附；`TwinUiDisplayWatcher` 分辨率重钳；`TwinUiVrAdapter` 桌面零影响、VR 分支待真机。
+- 证据：`UI/53` 40 项 0 失败（6 图）；回归 `UI/47` 58/0、`UI/48` 33/0、`UI/49` 11/0、`UI/52` 35/0；`F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-07_p9_5_cards`。场景未改 `9F907809DD8B5325021C087C0F6B3B6FB158857CF2FCF6F17725116D572DCD45`。
+- 坑：①`TwinUiLineChart` 用 `new GameObject(name, RectTransform, TwinUiLineChart)` 创建时**不会自动补 CanvasRenderer** → 切页时 `OnDisable` 抛 MissingComponentException，改为显式 `typeof(CanvasRenderer)`；②340 宽设计卡的 1.30 上限导致单列填不满 468 → 上限提到 1.40；③拖出/截图都要跨帧，不能同帧连做。
+- 遗留：VR 真机 NOT TESTED；多显示器热插拔未实测；拖出落点为级联默认位（不在松手处）；最大化时拖出不可达。
+
+---
+
+## 2026-11-07 01:47 · DSH-Agent · P9 散落 UI 收编 + 最小化悬浮球 + 漫游键鼠完善
+
+- 用户三点诉求：①散落 UI/双向控制提示集成进主面板为功能卡片 ②主面板最小化后浮出手机式小图标、点击复原 ③漫游键鼠补全。
+- 收编（`TwinUiScatteredUiBridge`，V2 专用，0.5 s 重断言）：性能 IMGUI / 拆解调试叠加 / SmartRaycaster 悬停 tag+详情 / DartStudio 通信调试窗 / 射线文字 HUD / IK HUD / 欢迎页(LoginPanel+BatteryLoginGate) / 旧壳控制器 / 演示模式路由 / 旧控制面板 = 10 处统一关闭；**只关显示，不动采样/录制/安全门**。
+- 新增 4 卡（14→18）：选中对象（射线命中名/坐标/UI 遮挡）、IK 预览（可达/限位/钳制/误差/迭代）、控制指令（**复用旧 `TwinCommandPanelView`** 预览/校验/确认/执行/急停，同一安全链，真机仍锁定）、漫游与操作（键位表/速度/位姿/最近动作）。页内卡片：8/7/6/3/3。
+- 悬浮球：56×56 可拖动，最小化/隐藏时出现、点击恢复；位置存 `TwinUI.Fab.v1`。**踩坑**：首版用 `SetActive(false)` 隐藏 → 自身 Update 停摆永远不再出现，改为 `CanvasGroup` 控制。
+- 漫游：WASD 取消"必须右键"（运行时 `requireRightMouseForMove=false`）、新增 F 聚焦命中点（`FocusOnPoint`）、R 复位（`RestoreInitialPose`）、速度/位姿/键位进卡与任务栏提示。
+- 证据：`UI/52` 35 项 0 失败（3 图）；`UI/51` 盘点 PASS；回归 `UI/47` 58/0、`UI/48` 33/0、`UI/49` 11/0；`F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-07_p9_integration`。
+- 场景：未改，仍 `9F907809DD8B5325021C087C0F6B3B6FB158857CF2FCF6F17725116D572DCD45`（6,976,838 B）。
+- 另修：`PerformanceProfiler`/`DisassemblySystem` 的 `OnGUI` 在面板对象为空时会抛 NRE 并触发编辑器 **Error Pause**（导致一次 Play 卡死），已加空面板防御；配合收编后 V2 不再出现该叠加层。
+- 遗留：VR/触控/多显示器未测；悬浮球无边缘吸附动画；控制指令卡真机下发仍需独立授权与安全评审。
+
+---
+
+## 2026-11-06 22:30 · DSH-Agent · P7/P8 主面板 V2（浏览器式工作台 + 卡片框架 + 14 张真数据卡片）
+
+- 形态：主窗 = 标题栏（沿用旧 Header）+ 5 页签 + 工具栏 + 可滚动页面区；页内卡片瀑布流；卡片可拆出为浮窗（最大化/最小化/图钉/Esc/归位）；底部任务栏统一收口；6 套布局预设。
+- 自由度：`MinWidth/MinHeight` 1080×620→**720×480**；四档断点（Compact<860 / Narrow / Medium / Wide）；内容进 ScrollRect，窗口变小不再裁切；最大化高度扣任务栏 34px；标题栏加「最小/隐藏」两个按钮。
+- 架构：新增 30 个文件 / 5,667 行（`Scripts/UI/Shell|Workspace|Widgets` + `Editor/TwinUiFreedomStage/TwinUiCardStage/TwinUiPerfStage`）；V2 **零场景改动**（全部运行时构建），Legacy 模式一行未删（`UI/46b` 回退）。
+- 卡片：14 张全部接真实只读数据源（`TwinUIStatusBinder` / `DigitalTwinRuntime` / `TwinCommandController` 只读字段 / `DisassemblySystem` / `PerformanceProfiler`），无假数据、无新订阅、无下发路径；步骤引导与训练评估如实标注"本地演示/自评，非评分系统"。
+- 证据：`UI/47` 57/57、`UI/48` 33/33、`UI/49` 11/11、`UI/50` 三段 PASS（UI-off 250.4 fps；总览 225.3 fps/4.44 ms；三浮窗 222.0 fps/4.50 ms；logErrors=0）；19 张截图；`F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p7_shell`。
+- 场景：未改，仍 `9F907809DD8B5325021C087C0F6B3B6FB158857CF2FCF6F17725116D572DCD45`（6,976,838 B）；新备份 `_backup/scenes/2026-11-06_p7p8_final`（同哈希）。
+- 事故/坑：①`Assembly-CSharp-Editor` 一度未生成 → 新增的 `TwinUiFreedomStage.cs` 因**未导入（无 .meta）**没进编译，`Assets/Refresh` 后才出现菜单；②该文件随后被 PowerShell 写坏成**全 NUL 字节**（`CS1056 Unexpected character`），整文件重写修复 → 以后新文件写完必须 `Assets/Refresh` + 查 `.meta` + `recompile_scripts` 再跑菜单；③`UI/50` 首版三段帧数统计写错导致死循环（同帧反复 BeginSegment），退出 Play 后修相位机重跑；④首版 `UI/48` 截图在同一帧连拍只落最后一张 → 改为跨帧队列；⑤上一轮遗留 prefs 里有浮窗，导致 `UI/48` 首跑 8 项 FAIL → 自检开头统一 `ResetForCheck()` 归零。
+- 遗留：论文图 4-15 仍是 P6 旧面板截图，V2 定稿后需重出（论文暂缓，已登记）；VR/多显示器/DPI/触控未测（NOT TESTED）；Legacy 回归项（UI/30/38/39/41 等）需先 `UI/46b` 再跑。
+
+---
+
 ## 2026-11-06 15:13 · DSH-Agent · P6 UI 精修完成（拖拽停靠 + Build 性能 + 圆角 + Wide 图）
 
 - `UI/41` 10/10：悬浮窗拖到主窗出现停靠预览→松手 Docked；dock 卡片拖出→Floating(≥480×330)→拖回 Docked；走 `TwinUiInput.WindowDrag`，不新起输入路径。
@@ -388,3 +429,9 @@ SHA256 `7F5638BD…` → **`9C604D15E8CF5A3F6F47582007DAC71D7DD38F70A11A0AD6405F
 - 场景未进 Play 验证过一次真实帧表现；VR 头显内观感需用户在头显/Game 视图确认。
 
 ---
+
+## 2026-11-08 Codex：P10画面修正
+经用户授权接手。修正PageView重复计宽、Header/Shell重叠、中文标题行高及主卡排列，新增UI/55真实Viewport回归。1920×1080 Play最终142 项PASS/0失败；浮窗同实例归位通过；场景哈希未变。记录：F:/new_2026-/zyq_ST_use/E_TJ/agent_runs/codex_2026-11-08/ui_repair/README.md。其余16卡Legacy、1280/Player/VR未测，视觉待用户签收。
+
+## 2026-11-08 Codex UI R2：射线与内容铺满
+已修绿色射线宽片（投影374→2px）、旧卡铺满和实际测高、浮窗字体/绘图区放大、外阴影收窄。UI/56覆盖五页默认呈现/正文底边/浮窗实例，最终0失败；场景哈希未变。报告：F:/new_2026-/zyq_ST_use/E_TJ/agent_runs/codex_2026-11-08/ui_repair_r2/README.md。用户观感待签收，Player/VR/长测未做。

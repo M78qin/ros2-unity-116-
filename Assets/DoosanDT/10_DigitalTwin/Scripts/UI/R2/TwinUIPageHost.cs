@@ -56,6 +56,14 @@ namespace DigitalTwin.UI
 
         private void Start()
         {
+            // P7：V2 工作台接管页签与页面可见性，旧的 MissionRoot/TwinOpsRoot/IndustrialRoot 由 V2 隐藏。
+            if (TwinUiShellMode.IsV2)
+            {
+                enabled = false;
+                Debug.Log("[PAGEHOST] dormant: shell mode V2");
+                return;
+            }
+
             // 运行时重新接线：构建器在编辑态写的 UnityEvent 监听不会序列化。
             Wire();
             Show(defaultPage);

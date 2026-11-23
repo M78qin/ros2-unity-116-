@@ -48,6 +48,9 @@ namespace DigitalTwin.UI
         public bool DisabledReasonPresent => !string.IsNullOrEmpty(disabledReason);
         public bool IsHovered => hovered;
         public bool IsPressed => pressed;
+
+        /// <summary>当前是否选中态（R2 A-2：T1/T2/T5/T6 断言按钮选中态用）。</summary>
+        public bool Selected => selected;
         public Image Background => background;
         public TwinUIGradientHover Gradient => hoverGradient;
 

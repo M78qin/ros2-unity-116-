@@ -18,6 +18,20 @@ namespace DigitalTwin
         Resume = 3
     }
 
+    // P0-F2/F3（2026-11-18）：远端停止确认状态。它与本地闩锁是两个独立事实：
+    //   None      = 没有发出停止请求（本地闩锁可能是被 SetEmergencyStopped(true) 直接置位的）；
+    //   Pending   = HALT 已投递到 /dt/cmd/halt，等待 ROS2 回执；
+    //   Confirmed = ROS2 在本次 HALT 之后回过停止类状态（HALT_REQUESTED/STOPPED/...）；
+    //   Failed    = HALT 没能投递出去（桥未启用/异常），远端状态未知。
+    // 说明：Confirmed 只证明"远端受理/已请求停止"，不构成物理停止证明。
+    public enum RemoteStopState
+    {
+        None = 0,
+        Pending = 1,
+        Confirmed = 2,
+        Failed = 3
+    }
+
     public readonly struct RobotCommandResult
     {
         public readonly bool Success;
@@ -56,6 +70,21 @@ namespace DigitalTwin
 
         [SerializeField, Tooltip("急停锁存状态。开启后 MOVE_JOINT 会被阻止，直到脚本或 Inspector 清除。")]
         private bool emergencyStopped;
+
+        // ---- P0-F2/F3 运行时状态（不序列化，不改变场景默认值） ----
+        private RemoteStopState _remoteStop = RemoteStopState.None;
+        private string _remoteStopDetail = "尚未请求远端停止";
+        private long _haltRequestNs;
+        private long _haltAckNs;
+        private long _haltAttempts;
+
+        public RemoteStopState RemoteStop => _remoteStop;
+        public string RemoteStopDetail => _remoteStopDetail;
+        public long HaltRequestNs => _haltRequestNs;
+        public long HaltAckNs => _haltAckNs;
+        public long HaltAttemptCount => _haltAttempts;
+        /// <summary>本地闩锁 + 远端确认同时成立时才允许解除急停。</summary>
+        public bool CanClearEmergencyStop => emergencyStopped && _remoteStop == RemoteStopState.Confirmed;
 
 
 
@@ -98,6 +127,20 @@ namespace DigitalTwin
             _planning.Initialize(runtime, this, _modeService);
             _paperRecorder = runtime == null ? FindObjectOfType<TwinPaperRecorder>() : runtime.PaperRecorder;
             ApplySettings(runtime == null ? null : runtime.Settings);
+            // P0-F3: 远端停止回执只从主 Ros2Bridge 的 /dt/status/motion 通道进来。
+            if (_ros2Bridge != null)
+            {
+                _ros2Bridge.MotionStatusChanged -= NotifyRemoteMotionState;
+                _ros2Bridge.MotionStatusChanged += NotifyRemoteMotionState;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (_ros2Bridge != null)
+            {
+                _ros2Bridge.MotionStatusChanged -= NotifyRemoteMotionState;
+            }
         }
 
         public bool EnterSync()
@@ -117,6 +160,15 @@ namespace DigitalTwin
 
         public bool EnterExecute()
         {
+            // P0-T3: 闩锁期间一律不得进入 Execute（此前只由 SendMoveJoint 的安全链兜底，
+            // 直接调 EnterExecute 可以绕过闩锁）。
+            if (emergencyStopped)
+            {
+                SetResult(false, enableDryRun || !enableRealRobotCommand, "BLOCKED",
+                    "Emergency stop is latched; remote stop confirmation is required before Execute.");
+                return false;
+            }
+
             if (!allowExecuteMode)
             {
                 SetResult(false, enableDryRun || !enableRealRobotCommand, "BLOCKED", "Enable Bidirectional Control before Execute.");
@@ -156,9 +208,138 @@ namespace DigitalTwin
             return SetResult(result.Success, result.DryRun, result.Status, result.ErrorMessage);
         }
 
+        /// <summary>
+        /// 直接置位/请求清除本地闩锁。
+        /// 置位：只锁本地，不发远端停止（要发远端请用 EmergencyStop()）。
+        /// 清除（P0-F3）：必须已有远端停止确认，否则拒绝清除并保持闩锁。
+        /// </summary>
         public void SetEmergencyStopped(bool stopped)
         {
-            emergencyStopped = stopped;
+            if (!stopped)
+            {
+                string reason;
+                if (!TryClearEmergencyStop(out reason))
+                {
+                    Debug.LogWarning("[TwinCommandController] 拒绝解除急停：" + reason, this);
+                }
+
+                return;
+            }
+
+            emergencyStopped = true;
+            _remoteStop = RemoteStopState.None;
+            _remoteStopDetail = "本地闩锁已置位，但未发送 HALT；远端未被请求停止";
+        }
+
+        /// <summary>
+        /// P0-F3：解除闩锁的唯一入口。只有「本地在闩锁 + 远端已确认停止」同时成立才返回 true。
+        /// </summary>
+        public bool TryClearEmergencyStop(out string reason)
+        {
+            if (!emergencyStopped)
+            {
+                reason = "当前未处于急停闩锁";
+                return true;
+            }
+
+            if (_remoteStop != RemoteStopState.Confirmed)
+            {
+                reason = "远端未确认停止（" + _remoteStop + "：" + _remoteStopDetail + "）";
+                return false;
+            }
+
+            emergencyStopped = false;
+            reason = "OK";
+            _remoteStop = RemoteStopState.None;
+            _remoteStopDetail = "远端已确认停止，闩锁已解除（非物理停止证明）";
+            return true;
+        }
+
+        /// <summary>
+        /// P0-F3：远端停止回执入口。由 Ros2Bridge.MotionStatusChanged 调用（也可被测试直接调用，
+        /// 与生产路径同一个入口）。只有在本次 HALT 之后到达、且属于停止类状态的回执才算确认。
+        /// </summary>
+        public void NotifyRemoteMotionState(string motionState, long receiveNs)
+        {
+            if (!emergencyStopped)
+            {
+                return;
+            }
+
+            if (_remoteStop == RemoteStopState.Confirmed)
+            {
+                return;
+            }
+
+            string state = NormalizeMotionState(motionState);
+            if (receiveNs < _haltRequestNs)
+            {
+                _remoteStopDetail = "丢弃过期回执 state=" + state + "（早于本次 HALT）";
+                return;
+            }
+
+            if (!IsRemoteStopAck(state))
+            {
+                if (_remoteStop == RemoteStopState.Pending)
+                {
+                    _remoteStopDetail = "远端状态=" + state + "，不是停止确认，闩锁保持";
+                }
+
+                return;
+            }
+
+            _remoteStop = RemoteStopState.Confirmed;
+            _haltAckNs = receiveNs;
+            long ackMs = (receiveNs - _haltRequestNs) / 1000000L;
+            _remoteStopDetail = "远端回执 " + state + "（HALT 后 " + ackMs + " ms）；表示远端已受理停止请求，不是物理停止证明";
+        }
+
+        /// <summary>远端停止确认接受的 motion 状态集合（adapter 当前只发 HALT_REQUESTED）。</summary>
+        private static bool IsRemoteStopAck(string state)
+        {
+            switch (state)
+            {
+                case "HALT_REQUESTED":
+                case "HALTED":
+                case "STOPPED":
+                case "MOVE_STOPPED":
+                case "STANDBY":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static string NormalizeMotionState(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return "(empty)";
+            }
+
+            string text = raw.Trim();
+            int split = text.IndexOf('|');
+            if (split >= 0)
+            {
+                text = text.Substring(0, split).Trim();
+            }
+
+            return text.ToUpperInvariant();
+        }
+
+        private void ApplyHaltSendOutcome(RobotCommandResult result)
+        {
+            if (result.Success)
+            {
+                _remoteStop = RemoteStopState.Pending;
+                _remoteStopDetail = "HALT 已投递到 /dt/cmd/halt（std_msgs/Bool），等待 /dt/status/motion 回执";
+                return;
+            }
+
+            _remoteStop = RemoteStopState.Failed;
+            _remoteStopDetail = "HALT 未投递成功（" + result.Status +
+                                (string.IsNullOrEmpty(result.ErrorMessage) ? string.Empty : "：" + result.ErrorMessage) +
+                                "）；远端状态未知，闩锁保持";
         }
 
         public void SetLocalMode(TwinMode mode)
@@ -223,7 +404,9 @@ namespace DigitalTwin
                     return rosUnavailableResult;
                 }
 
-                RobotCommandResult rosResult = _ros2Bridge.SendMoveJointRad(targetJointRad, speedPercent);
+                float[] targetDegRos = new float[targetJointRad.Length];
+                for (int i = 0; i < targetDegRos.Length; i++) targetDegRos[i] = targetJointRad[i] * Mathf.Rad2Deg;
+                RobotCommandResult rosResult = _ros2Bridge.SendDoosanMotionAbsolute(targetDegRos, speedPercent);
                 RobotCommandResult rosCommandResult = SetResult(rosResult.Success, rosResult.DryRun, rosResult.Status, rosResult.ErrorMessage);
                 LogPaperCommand("MOVE_JOINT", "ROS2", string.Empty, rosCommandResult, FormatTargetRad(targetJointRad), sendWallMs, sendNs);
                 return rosCommandResult;
@@ -258,6 +441,10 @@ namespace DigitalTwin
         public RobotCommandResult EmergencyStop()
         {
             emergencyStopped = true;
+            _haltAttempts++;
+            _haltRequestNs = SystemClock.NowNs();
+            _remoteStop = RemoteStopState.Pending;
+            _remoteStopDetail = "HALT 请求进行中";
 
             CommandRoute route = ResolveCommandRoute();
             long sendWallMs = SystemClock.UtcUnixMs();
@@ -267,12 +454,14 @@ namespace DigitalTwin
                 if (_ros2Bridge == null)
                 {
                     RobotCommandResult rosUnavailableResult = SetResult(false, false, "ERROR", "Ros2Bridge is unavailable.");
+                    ApplyHaltSendOutcome(rosUnavailableResult);
                     LogPaperCommand("HALT", "ROS2", string.Empty, rosUnavailableResult, string.Empty, sendWallMs, sendNs);
                     return rosUnavailableResult;
                 }
 
                 RobotCommandResult rosResult = _ros2Bridge.SendHalt();
                 RobotCommandResult rosHaltResult = SetResult(rosResult.Success, rosResult.DryRun, rosResult.Status, rosResult.ErrorMessage);
+                ApplyHaltSendOutcome(rosHaltResult);
                 LogPaperCommand("HALT", "ROS2", string.Empty, rosHaltResult, string.Empty, sendWallMs, sendNs);
                 return rosHaltResult;
             }
@@ -282,6 +471,7 @@ namespace DigitalTwin
                 if (_bridge == null)
                 {
                     RobotCommandResult dartUnavailableResult = SetResult(false, false, "ERROR", "DartStudioBridge is unavailable.");
+                    ApplyHaltSendOutcome(dartUnavailableResult);
                     LogPaperCommand("HALT", "DartStudio", string.Empty, dartUnavailableResult, string.Empty, sendWallMs, sendNs);
                     return dartUnavailableResult;
                 }
@@ -289,11 +479,13 @@ namespace DigitalTwin
                 // HALT is allowed to bypass dry-run because it only asks source side to stop motion.
                 RobotCommandResult bridgeResult = _bridge.SendHalt();
                 RobotCommandResult dartHaltResult = SetResult(bridgeResult.Success, bridgeResult.DryRun, bridgeResult.Status, bridgeResult.ErrorMessage);
+                ApplyHaltSendOutcome(dartHaltResult);
                 LogPaperCommand("HALT", "DartStudio", DartTcpCommandBuilder.BuildHalt(), dartHaltResult, string.Empty, sendWallMs, sendNs);
                 return dartHaltResult;
             }
 
             RobotCommandResult noRoute = SetResult(false, false, "ERROR", "No active command source is available.");
+            ApplyHaltSendOutcome(noRoute);
             LogPaperCommand("HALT", "None", string.Empty, noRoute, string.Empty, sendWallMs, sendNs);
             return noRoute;
         }

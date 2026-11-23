@@ -24,7 +24,7 @@ namespace DigitalTwin.EditorTools
     public static class TwinUIResponsiveStage
     {
         public const string CanvasPath = "30_界面与交互/UI_二期面板";
-        public const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p3_responsive";
+        public const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_responsive";
         public const string EvidenceShots = EvidenceRoot + @"\shots";
         public const string StageLogPath = "Logs/p3_responsive_stage.txt";
         public const string DumpPath = "Logs/p3_layout_dump.txt";

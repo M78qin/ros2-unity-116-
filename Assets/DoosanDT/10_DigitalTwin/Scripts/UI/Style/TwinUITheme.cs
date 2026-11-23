@@ -71,7 +71,11 @@ namespace DigitalTwin.UI
         Layer2,
         LineStrong,
         Strong,
-        Shadow
+        Shadow,
+
+        // P7 追加：V3.1 原型 --ui-panel3（悬停/抬升表面）与 --quiet（三级文字）。
+        Panel3,
+        Quiet
     }
 
     public struct TwinUIPalette
@@ -105,6 +109,10 @@ namespace DigitalTwin.UI
         public Color Strong;
         public Color Shadow;
         public float UiScale;
+
+        // P7 追加：--ui-panel3（悬停/抬升表面）与 --quiet（三级文字，弱于 Muted）。
+        public Color Panel3;
+        public Color Quiet;
 
         // 按钮五态（Normal/Hover/Pressed/Selected/Disabled）
         public Color BtnFill;
@@ -161,6 +169,8 @@ namespace DigitalTwin.UI
                 Strong = TwinUITheme.Hex("#22D3EE"),
                 Shadow = new Color(0f, 0f, 0f, 0.62f),
                 UiScale = 1f,
+                Panel3 = TwinUITheme.Hex("#2A3949"),
+                Quiet = TwinUITheme.Hex("#78899B"),
                 BtnFill = TwinUITheme.Hex("#1B2A3A"),
                 BtnFillHover = TwinUITheme.Hex("#24384C"),
                 BtnFillPressed = TwinUITheme.Hex("#2D465E"),
@@ -220,6 +230,8 @@ namespace DigitalTwin.UI
                 Strong = TwinUITheme.Hex("#3F5AF0"),
                 Shadow = new Color(0f, 0f, 0.02f, 0.18f),
                 UiScale = 1f,
+                Panel3 = TwinUITheme.Hex("#E3E9F3"),
+                Quiet = TwinUITheme.Hex("#7A8698"),
                 BtnFill = TwinUITheme.Hex("#FFFFFF"),
                 BtnFillHover = TwinUITheme.Hex("#F2F5FA"),
                 BtnFillPressed = TwinUITheme.Hex("#E8EDFF"),
@@ -287,6 +299,8 @@ namespace DigitalTwin.UI
                 Glow = new Color(0.224f, 0.831f, 0.902f, 0.28f),
                 Shadow = new Color(0f, 0f, 0f, 0.64f),
                 UiScale = 1f,
+                Panel3 = TwinUITheme.Hex("#1C3040"),
+                Quiet = TwinUITheme.Hex("#658295"),
                 PlotBg = TwinUITheme.Hex("#0A1E2D"),
                 Grid = TwinUITheme.Hex("#23455A"),
                 RowAlt = TwinUITheme.Hex("#132E40"),
@@ -471,6 +485,8 @@ namespace DigitalTwin.UI
 
         private static TwinUIToneRole Match(TwinUIPalette p, Color c)
         {
+            if (Near(c, p.Panel3)) return TwinUIToneRole.Panel3;
+            if (Near(c, p.Quiet)) return TwinUIToneRole.Quiet;
             if (Near(c, p.Layer)) return TwinUIToneRole.Layer;
             if (Near(c, p.Layer2)) return TwinUIToneRole.Layer2;
             if (Near(c, p.LineStrong)) return TwinUIToneRole.LineStrong;
@@ -542,6 +558,8 @@ namespace DigitalTwin.UI
                 case TwinUIToneRole.LineStrong: return p.LineStrong;
                 case TwinUIToneRole.Strong: return p.Strong;
                 case TwinUIToneRole.Shadow: return p.Shadow;
+                case TwinUIToneRole.Panel3: return p.Panel3;
+                case TwinUIToneRole.Quiet: return p.Quiet;
                 case TwinUIToneRole.Glow: return p.Glow;
                 case TwinUIToneRole.Series0: return SeriesAt(0);
                 case TwinUIToneRole.Series1: return SeriesAt(1);

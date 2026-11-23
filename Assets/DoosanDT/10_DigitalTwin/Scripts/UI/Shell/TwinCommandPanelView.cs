@@ -1,4 +1,4 @@
-﻿// Bidirectional-control PRESENTATION layer for the unified shell.
+// Bidirectional-control PRESENTATION layer for the unified shell.
 //
 // Scope of this batch: the panel shows what the existing safety chain already knows, and every
 // button either reads state or calls an existing TwinCommandController entry point. No new command
@@ -28,9 +28,13 @@ namespace DigitalTwin
         [SerializeField, Range(1f, 100f)] private float speedPercent = 10f;
         [SerializeField] private float refreshHz = 3f;
 
+        private PointMotionSession _pointSession;
+        public void BindPointSession(PointMotionSession session) { _pointSession = session; }
         private float _nextRefresh;
         private bool _confirmArmed;
-        private bool _haltLatched;
+
+        /// <summary>最近一次急停按钮的结果文本（供 UI 与 PlayMode 测试断言）。</summary>
+        public string LastHaltMessage { get; private set; } = string.Empty;
 
         public void Bind(DigitalTwinRuntime runtimeRef, TwinCommandController controllerRef, TMP_Text status, TMP_Text detail,
             Button preview, Button check, Button confirm, Button execute, Button halt)
@@ -67,6 +71,7 @@ namespace DigitalTwin
         /// <summary>预览: only draws the plan preview, TwinCommandController.EnterPlan() does not move anything.</summary>
         public void PreviewPlan()
         {
+            if (_pointSession != null) { _pointSession.Preview(); return; }
             if (controller == null)
             {
                 SetStatus("无控制器", TwinUIShellText.CommandIdle);
@@ -82,6 +87,7 @@ namespace DigitalTwin
         /// <summary>校验: reads the current safety gate. It deliberately does not trigger a move.</summary>
         public void CheckSafety()
         {
+            if (_pointSession != null) { _pointSession.Prepare(); return; }
             if (controller == null)
             {
                 SetStatus("无控制器", TwinUIShellText.CommandIdle);
@@ -100,6 +106,7 @@ namespace DigitalTwin
         /// <summary>确认: arms the next execute click. Two-step guard so a stray click cannot command.</summary>
         public void ArmConfirm()
         {
+            if (_pointSession != null) { _pointSession.Confirm(); return; }
             _confirmArmed = !_confirmArmed;
             SetStatus(_confirmArmed ? TwinUIShellText.CommandConfirm + "：已武装" : TwinUIShellText.CommandConfirm + "：已取消",
                 _confirmArmed ? "再次点击执行即可（干运行）" : "未武装");
@@ -112,6 +119,7 @@ namespace DigitalTwin
         /// </summary>
         public void ExecuteGuarded()
         {
+            if (_pointSession != null) { _pointSession.Execute(); return; }
             if (controller == null || runtime == null)
             {
                 SetStatus("无控制器", TwinUIShellText.CommandIdle);
@@ -147,17 +155,51 @@ namespace DigitalTwin
             Refresh();
         }
 
-        /// <summary>急停: latches the local stop flag only, so the demo cannot accidentally resume motion.</summary>
+        /// <summary>
+        /// 急停/复位（P0-F3 修复）：按下 = 向远端发 HALT（Ros2Bridge.SendHalt -> Bool）+ 置本地闩锁；
+        /// 复位必须已有远端停止确认，拿不到就保持闩锁，并在面板明确显示"远端未确认停止"。
+        /// 旧实现只是本地翻转，既不发远端停止，也能无条件清闩锁。
+        /// </summary>
         public void ToggleHalt()
         {
-            _haltLatched = !_haltLatched;
-            if (controller != null)
+            if (_pointSession != null)
             {
-                controller.SetEmergencyStopped(_haltLatched);
+                _pointSession.Cancel(true);
+                LastHaltMessage = "点动通道取消：halt=" + _pointSession.LastHaltStatus +
+                                  (_pointSession.LastHaltPublished ? "（主通道 10002/Bool）" : "（未发出）");
+                SetStatus(TwinUIShellText.CommandHalt + "：已请求", LastHaltMessage + "；远端停止未确认，非物理停止证明");
+                Refresh();
+                return;
             }
 
-            SetStatus(_haltLatched ? TwinUIShellText.CommandHalt + "：已按下" : TwinUIShellText.CommandHalt + "：已复位",
-                _haltLatched ? "本地停止标记已置位" : "本地停止标记已清除");
+            if (controller == null)
+            {
+                SetStatus("无控制器", TwinUIShellText.CommandIdle);
+                return;
+            }
+
+            if (!controller.IsEmergencyStopped)
+            {
+                RobotCommandResult halt = controller.EmergencyStop();
+                LastHaltMessage = "HALT " + halt.Status + "；远端确认=" + controller.RemoteStop;
+                SetStatus(TwinUIShellText.CommandHalt + "：已按下", LastHaltMessage + "；闩锁保持，直到远端回执");
+            }
+            else
+            {
+                string reason;
+                bool cleared = controller.TryClearEmergencyStop(out reason);
+                if (cleared)
+                {
+                    LastHaltMessage = "远端已确认停止：" + controller.RemoteStopDetail + "；闩锁已清除";
+                    SetStatus(TwinUIShellText.CommandHalt + "：已复位", LastHaltMessage);
+                }
+                else
+                {
+                    LastHaltMessage = "远端未确认停止：" + reason + "；闩锁保持";
+                    SetStatus(TwinUIShellText.CommandHalt + "：保持闩锁", LastHaltMessage);
+                }
+            }
+
             Refresh();
         }
 
@@ -184,7 +226,8 @@ namespace DigitalTwin
             string mode = controller.CurrentMode.ToString();
             string dryRun = controller.EnableDryRun ? "干运行" : "真机";
             RobotCommandResult last = controller.LastResult;
-            statusText.text = mode + " / " + dryRun + " / " + (controller.IsEmergencyStopped ? "急停" : "正常");
+            statusText.text = mode + " / " + dryRun + " / " +
+                              (controller.IsEmergencyStopped ? "急停(" + controller.RemoteStop + ")" : "正常");
 
             if (detailText == null)
             {

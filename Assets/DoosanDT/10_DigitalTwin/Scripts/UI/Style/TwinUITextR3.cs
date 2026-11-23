@@ -129,6 +129,11 @@ namespace DigitalTwin.UI
         public const string ThresholdDemoTag = "阈值注入（非实测）";
         public const string EmDash = "—";
 
+        // P8 卡片框架：统一占位/未接入文案（禁止用 0 或假数据填充）。
+        public const string Placeholder = "—";
+        public const string NotAvailable = "未接入";
+        public const string CardEmptyHint = "本卡暂无可显示的数据源";
+
         // 界面刷新频率档位（只允许这几档，见 TwinUiSettings.SetUiRefreshHz）
         public static readonly float[] UiHzOptions = { 5f, 10f, 20f, 30f, 60f };
     }

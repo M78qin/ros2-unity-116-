@@ -256,3 +256,164 @@ ITwinPointerHit（射线命中）
 - 证据目录：`dsh_2026-11-05_p2_window`、`dsh_2026-11-06_p3_responsive`、`dsh_2026-11-06_p4_modules`、`dsh_2026-11-06_p5_floating`、`dsh_2026-11-06_p6_refine`。
 - 场景基线 `9F907809…`（6,976,838 B）；备份 `_backup/scenes/2026-11-06_p4_modules_final/`。
 - 边界：窗口/模块自检均为 Play 内组件 API 断言，真实鼠标手感与人眼观感 UNKNOWN；吸附为 24px 阈值判定非磁吸动画。
+
+---
+
+## 15. V2 浏览器式工作台与卡片框架（P7/P8，2026-11-06，当前默认）
+
+**模式开关**：`TwinUiShellMode`（`PlayerPrefs: TwinUI.Shell.Mode`，默认 `V2`；菜单 `UI/46` V2、`UI/46b` Legacy、`UI/46c` 清空）。
+V2 与 Legacy 互斥：`TwinUiModuleHost.Awake` / `TwinUIPageHost.Start` 在 V2 下自休眠，Legacy 代码一行未删，可随时回退。
+
+**零场景改动**：V2 全部运行时构建。`TwinUiWindowHost.Bootstrap` → `TwinUiShellV2.Install`，在 `UiWindowContent` 下新建
+`ShellV2Root`（`WorkspaceTabs` / `Toolbar` / `PageViewport(ScrollRect)` / `PageContent` / `PageView`），
+`UiTaskbar` 挂 Canvas 底部 34px；窗口最大化高度自动扣除任务栏。场景里仍只有早已序列化的 `TwinUiWindowHost` + `TwinUiModuleHost`。
+
+**页面注册**：`TwinUiWorkspaceRegistry` 5 页 —— `overview / twin / control / mission / experiment`；
+一页 = 页头（kicker/title/subtitle/状态）+ 二级导航 + 卡片 id 列表。新增页或卡片**不需要改场景或布局代码**。
+
+**卡片契约**：`TwinUiModule` 增 `Card` 状态、`Surface(Card/Floating)`、`Kicker/WorkspaceId/Group/CardSize/FloatingMinSize/Detachable`；
+`TwinUiWidgetCatalog` 注册 14 张卡；`TwinUiCardParts` 提供 Stat/Kv/Badge/Progress/Caption 等共用积木。
+
+**表面管理**：`TwinUiSurfaceHost` 保证**单实例内容视图** —— 拆出 = `SetParent` 到浮窗内容区，归位 = `SetParent` 回卡片，
+卡位显示"已在浮窗中"占位；不重建视图、不重复订阅。浮窗复用 `TwinUiModuleWindow`（同一套 Frame 外壳），V2 起支持最大化。
+
+**网格**：`TwinUiCardGrid` 瀑布流（列宽固定、卡片进最矮列）：<860 单列 / 860–1099 两列 / 1100–1499 三列 / ≥1500 四列。
+
+**窗口自由度**：`MinWidth/MinHeight` 1080×620 → **720×480**；断点 `Compact <860 / Narrow 860–1099 / Medium 1100–1499 / Wide ≥1500`；
+标题栏三按钮（最小 / MAX / 隐藏），任务栏可恢复；内容进 ScrollRect，变小不再裁切。
+
+**持久化**：`TwinUI.Window.Layout.v1`（窗口几何，沿用）+ `TwinUI.Shell.v2`（页签 / 二级导航 / 预设 / 每卡状态与浮窗矩形 / 叠放顺序）；
+首次运行从 `TwinUI.Modules.v1` 迁移（`Docked→Card`、`Floating` 保留矩形）。损坏/版本不符回退默认并打日志。
+
+**预设**：`TwinUiLayoutPresets` 6 套（默认 / 观测 / 监测 / 控制 / 拆解 / 实验）= 页签 + 主窗比例 + 浮窗集合。
+
+**验收（全 Play 内实测）**：
+| 菜单 | 内容 | 结果 |
+|---|---|---|
+| `UI/47` | 外壳安装 / 四档尺寸 / 最大化扣任务栏 / 最小化隐藏 / 5 页签 / 预设与存档 | 57 项 0 失败，6 图 |
+| `UI/48` | 拆出→浮窗→最大化/还原→最小化/恢复→多浮窗 z 序→图钉→Esc→归位→存档 | 33 项 0 失败，4 图 |
+| `UI/49` | 令牌 / 字阶≥10.5px / 卡片圆角 14/14 / Light↔Ocean 切换 | 11 项 0 失败，5 图 |
+| `UI/50` | 三段各 8 s：UI-off 250.4 fps / 总览 225.3 fps(4.44 ms) / 三浮窗 222.0 fps(4.50 ms) | PASS |
+
+**边界**：VR 未适配（NOT TESTED）；多显示器/DPI/触控未测；视觉"好不好看"是人工项 —— 自动化只证明令牌、字阶、圆角、无溢出，
+观感需在 Game 视图人工确认后才可记 PASS。
+
+---
+
+## 16. 散落 UI 收编 + 最小化悬浮球 + 漫游完善（P9，2026-11-07）
+
+### 16.1 收编清单（V2 下统一关闭独立显示层，信息搬进主面板卡片）
+
+| # | 散落显示层 | 原形态 | V2 处置 | 信息去处 |
+|---|---|---|---|---|
+| 1 | `PerformanceProfiler` | 左上角 IMGUI 性能窗 | 始终关闭（`SetOnScreenUI(false)`，翻页/归位不再恢复） | 性能监测卡 |
+| 2 | `DisassemblySystem` | IMGUI 调试叠加层 | `showDebugOverlay=false` / `debugVisible=false` | 拆解进度卡 |
+| 3 | `SmartRaycaster` 悬停信息 | 悬浮 tag + 详情面板（IMGUI） | 两个开关关闭 | 选中对象卡 |
+| 4 | `DartStudioBridge` | 左上角通信调试窗 | `SetDebugGuiVisible(false)` | 数据链卡 |
+| 5 | `TwinPlayRayVisual` | 左下角射线文字 HUD | `SetHudEnabled(false)` | 选中对象卡 |
+| 6 | `TwinPlayIkHandle` | 左上角 IK HUD | `SetHudEnabled(false)` | IK 预览卡 |
+| 7 | `BatteryLoginGate` + `LoginPanel` | 欢迎/登录页 | 隐藏并停用（V2 直接进主面板） | 总览页 |
+| 8 | `TwinUIShellController` | 旧壳控制器（旧页签/状态条） | `enabled=false` | V2 页签/工具栏 |
+| 9 | `TwinDemoModeRouter` | 演示模式路由（切旧面板） | `enabled=false` | V2 页签 |
+| 10 | `TwinCommandPanelView` | 旧控制面板（停靠旧壳） | `enabled=false`；**组件被控制指令卡复用** | 控制指令卡 |
+
+实现：`TwinUiScatteredUiBridge`（V2 专用，0.5 s 重断言 + 幂等计数 + `Describe()` 供自检）。
+它只改显示开关与 `enabled`，**不动采样频率、不停止录制、不改安全门**。
+
+### 16.2 新增卡片（4 张，卡片总数 14 → 18）
+
+| 卡片 id | 标题 | 归属页 | 数据源（只读） |
+|---|---|---|---|
+| `selection` | 选中对象 | 总览 / 数字孪生 | `TwinPlayRayVisual`（命中名/世界坐标/屏幕坐标/UI 遮挡） |
+| `ik` | IK 预览 | 数字孪生 / 双向控制 | `TwinPlayIkHandle`（状态/可达/限位/钳制/位置旋转误差/迭代） |
+| `command` | 控制指令 | 双向控制 | **复用 `TwinCommandPanelView`**（预览/校验/确认/执行/急停，同一安全链） |
+| `roam` | 漫游与操作 | 总览 | `TwinPlayCameraRig` + `TwinUiRoamBridge`（键位表/速度/位姿/最近动作） |
+
+页内卡片数：总览 8 / 数字孪生 7 / 双向控制 6 / 拆解实训 3 / 实验数据 3。
+
+### 16.3 最小化悬浮球（`TwinUiMinimizeFab`）
+
+- 主窗最小化或隐藏时，在画布右侧浮出 56×56 圆角按钮（"台/工作台"），点击即回到正常大小；主窗可见时自动隐藏。
+- 可拖动，位置归一化存 `PlayerPrefs: TwinUI.Fab.v1`，分辨率变化钳回可见区。
+- 实现要点：**不要 `SetActive(false)`**——那会让自身 `Update` 停摆、永远无法再出现；改用 `CanvasGroup`（alpha + blocksRaycasts + interactable）控制显隐与点击穿透。
+
+### 16.4 漫游键鼠完善（`TwinUiRoamBridge` + `TwinPlayCameraRig` 扩展）
+
+| 能力 | 改前 | 改后 |
+|---|---|---|
+| WASD 移动 | 必须按住右键（`requireRightMouseForMove=1`） | **无需右键**（V2 运行时置 0；视角仍需右键） |
+| 视角 | 右键拖动 | 不变（Esc 释放鼠标） |
+| 速度 | 滚轮调速 | 不变（面板显示当前 m/s） |
+| 聚焦 | 无 | **F** / 卡片按钮 = 相机拉到命中零件前方并对准（`FocusOnPoint`） |
+| 复位 | 仅 API | **R** / 卡片按钮 = `RestoreInitialPose` |
+| 键位说明 | 任务栏一行小字 | 任务栏提示 + 漫游与操作卡（键位表） |
+
+### 16.5 验收（Play 内实测）
+
+| 菜单 | 内容 | 结果 |
+|---|---|---|
+| `UI/52` | 散落层 10 项关闭、4 张新卡在位、悬浮球最小化/隐藏/点击恢复、漫游 6 项行为 | 35 项 0 失败，3 图 |
+| `UI/51` | 散落 UI 盘点（只读）：Canvas 清单 / IMGUI / HUD / 旧根节点 | PASS（仅 `UI_二期面板` 活跃） |
+| `UI/47` | 回归：窗口自由度（含模块数 18、总览 8 卡） | 58 项 0 失败 |
+| `UI/48` | 回归：卡片拆出/浮窗/任务栏 | 33 项 0 失败 |
+| `UI/49` | 回归：令牌/字阶/18 张卡圆角 | 11 项 0 失败 |
+
+**场景零改动**：仍 `9F907809DD8B5325021C087C0F6B3B6FB158857CF2FCF6F17725116D572DCD45`（6,976,838 B）。边界：VR/触控/多显示器未测；悬浮球无边缘吸附动画；控制指令卡真机下发仍默认锁定（需独立授权与安全评审）。
+
+---
+
+## 17. 卡片网页式缩放 + 多色折线 + 入口/硬锁/拖出/双端适配（P9.5，2026-11-07）
+
+### 17.1 响应式卡片：整块等比缩放（用户要求"像网页缩放"）
+
+- 每张卡有**设计尺寸**（宽 = 模块 `CardSize.x`，通常 320–380；高 = `CardSize.y`），卡内所有坐标/字号/图表都按设计尺寸绝对排版。
+- 排版时 `TwinUiCardGrid` 按可用宽决定列数：**<760 一列 / 760–1159 两列 / 1160–1559 三列 / ≥1560 四列**；
+  列宽 = `(可用宽 - gap×(n-1))/n`，但单卡视觉宽上限 **468**（更宽就整行居中留白，避免单列被拉成巨卡）。
+- 缩放：`scale = clamp(卡宽 / 设计宽, 0.62, 1.40)`；卡片根节点 `sizeDelta=设计尺寸`、`localScale=scale` →
+  卡内折线、字号、边距**一起缩放**，行内按该行最大视觉高度对齐，整行居中。
+- 浮窗：同一份内容用 `TwinUiDesignScaler` 等比适配窗口（`min(宽/设计宽, 高/设计高)`，0.5–1.6），不再出现"右下角空白"。
+- 观感基线（1920 画布/宽 720–1600 实测）：720 单列 scale≈1.38；900 两列≈1.26；1200 三列≈1.13；1600 四列≈1.13。
+
+### 17.2 卡内多色折线
+
+- 新增 `TwinUiLineChart`（MaskableGraphic 自绘）与 `TwinUiLineChartBuffer`（环形缓冲）：
+  最多 6 条线、每序列取 `TwinUIStyle.SeriesColors` 颜色、autoRange 8% 余量、低对比网格、warn/crit 虚线阈值、
+  左上角富文本图例（线性色 + label + 单位），空态居中"无数据（等待数据源）"；顶点复用，值未变不重绘。
+- 已接入：**关节力矩卡**（J1–J6 六条彩色线 + 2×3 数值网格 + 每关节色点）、**关节角卡**（同结构，单位 °）。
+  采样 4 Hz、缓冲 96 点（≈24 s）；无帧时曲线空、数值 `—`。
+
+### 17.3 系统入口卡（原欢迎/登录页并入）
+
+`welcome` 卡（总览首卡）：项目名 + 版本/引擎 + 界面模式 + 数据源 + 当前工作区 + 「退出系统」；
+欢迎页不再单独弹一层（`TwinUiScatteredUiBridge` 仍隐藏旧 LoginPanel）。
+
+### 17.4 控制指令硬锁（执行按钮）
+
+`TwinUiCommandGate`：执行按钮默认**不可点**；必须同时满足
+①本卡点【授权】（仅本次 Play，离开页面自动收回）②`TwinRuntimeProfile.enableRealRobotCommand=true` ③未急停，
+才把按钮置为可点；即便可点，dry-run/真实下发仍由既有 `TwinCommandController` + `SafetyCheckService` 决定。
+卡片显示门控状态与**具体原因**（未授权 / Profile 未开 / 急停）。
+
+### 17.5 其它补齐
+
+| 能力 | 说明 |
+|---|---|
+| 卡片拖出成浮窗 | `TwinUiCardDragOut`：按住标题栏拖出主窗 ≥120 px 且指针离开窗口 → 走同一个 `SurfaceHost.Detach`；窗口内松手不拆 |
+| 悬浮球吸附 | `TwinUiMinimizeFab`：松手距左右边 <24 px → 0.18 s 平滑吸附；`RefreshLayout()` 供分辨率变化重钳 |
+| 多显示器/分辨率 | `TwinUiDisplayWatcher`：0.5 s 轮询分辨率/显示器数，变化时重钳窗口 + 刷新悬浮球 |
+| VR 适配骨架 | `TwinUiVrAdapter`：`isDeviceActive=false` 时完全不碰画布（桌面自检不受影响）；VR 激活时切 ScreenSpaceCamera + 窗口 85% 宽，退出恢复快照。**无头显 → NOT TESTED** |
+
+### 17.6 验收（Play 内实测）
+
+| 菜单 | 内容 | 结果 |
+|---|---|---|
+| `UI/53` | 四档列数/缩放/行对齐、两张 6 序列折线、入口卡、硬锁 6 项、拖出成浮窗、悬浮球/显示器/VR 状态 | 40 项 0 失败，6 图 |
+| `UI/47/48/49/52` 回归 | 窗口自由度 / 卡片浮窗 / 令牌字阶 / 散落 UI+悬浮球+漫游 | 58 / 33 / 11 / 35 项，全 0 失败 |
+
+场景零改动：`9F907809DD8B5325021C087C0F6B3B6FB158857CF2FCF6F17725116D572DCD45`（6,976,838 B）。已知边界：VR 无真机（NOT TESTED）；多显示器热插拔未实测；卡片拖出落点用级联默认位（不在松手位置）；最大化时"拖出主窗"不可达（未处理）。
+
+## 2026-11-08 Codex 布局合同修正
+PageView横向stretch时sizeDelta.x=0；V2 Shell起点在实际Header底边之后；V2 Header使用标题/状态两行，Legacy保持原方法。卡片中文标题24高；响应式卡测量为最小内容高度，同排可分配额外外框高度；单卡末行左排。UI/55通过真实WindowHost驱动并在Viewport共同坐标检查边界及TMP渲染。详见E_TJ agent_runs/codex_2026-11-08/ui_repair/README.md。
+
+## 2026-11-08 UI R2 呈现适配
+V2旧模板不再整卡缩放封顶，新增TwinUiContentFit：按实际内容底边测高、横向相对布局、纵向/字号利用宿主尺寸；原生模块仍先ApplyContentLayout。Invalidate必须清除旧快照，避免覆盖新宽布局；浮窗不按页内占位卡重排。UI/56为本轮集成入口；旧UI/53/54缩放断言不适用新目标。完整说明与回退见E_TJ agent_runs/codex_2026-11-08/ui_repair_r2/README.md。

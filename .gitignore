@@ -8,6 +8,25 @@
 [Uu]ser[Ss]ettings/
 /[Mm]emoryCaptures/
 /[Rr]ecordings/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+.gradle/
+ExportedObj/
+.consulo/
+sysinfo.txt
+crashlytics-build.properties
 
 # ========== 只备份「你写的代码」，忽略场景/模型/贴图等 ==========
 *.unity

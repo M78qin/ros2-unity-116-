@@ -14,8 +14,23 @@ namespace DigitalTwin.UI
         /// <summary>是否允许拖动标题栏（模块悬浮窗恒 true；主窗恒 true）。</summary>
         bool AllowsDrag { get; }
 
-        /// <summary>是否允许最大化（主窗 true；模块悬浮窗 false → 不创建 MAX 按钮/F11/双击）。</summary>
+        /// <summary>是否允许最大化（主窗 true；模块悬浮窗 true → 可放大到画布；false 时不创建 MAX 按钮/F11/双击）。</summary>
         bool AllowsMaximize { get; }
+
+        /// <summary>是否允许最小化（V2 主窗 true：收进底部任务栏；模块悬浮窗 false）。</summary>
+        bool AllowsMinimize { get; }
+
+        /// <summary>是否允许隐藏（V2 主窗 true：关闭显示，任务栏可恢复；模块悬浮窗 false）。</summary>
+        bool AllowsHide { get; }
+
+        /// <summary>最小化（主窗进任务栏）。</summary>
+        void Minimize();
+
+        /// <summary>隐藏（关闭主窗显示，但不销毁状态）。</summary>
+        void Hide();
+
+        /// <summary>标题栏按钮是否由 Frame 统一生成（主窗 true；模块悬浮窗自己管理 → false，避免按钮重叠）。</summary>
+        bool FrameOwnsTitleButtons { get; }
 
         Canvas Canvas { get; }
 

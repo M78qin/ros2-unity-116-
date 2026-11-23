@@ -124,3 +124,21 @@
 | A45 | P1a 遗留 Canvas 禁用批1（`UI/21/22/23` + 回归） | DONE（13 Canvas→active 1；场景 `5EC7EB2C…`；`dsh_2026-11-05_p1_legacy`） |
 | A47 | P6 数据侧并行线（A35 收帧修复 + 录制器唯一化） | BLOCKED（A35 根因未定位；独立写入域） |
 
+
+| A55 | P7 窗口自由度：最小尺寸 1080×620→720×480、Compact 档、内容 ScrollRect、标题栏最小化/隐藏、底部任务栏、最大化扣任务栏 | DONE（`UI/47` 57 项 0 失败；截图 186–191；场景未变 `9F907809…`；`F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-06_p7_shell`） |
+| A56 | P7b/P8 外壳：`TwinUiShellMode` V2/Legacy 开关、`TwinUiShellV2` 页签/工具栏/滚动页、`TwinUiTaskbar`、6 套预设、`TwinUI.Shell.v2` 持久化与 v1 迁移 | DONE（`UI/47` 预设/存档往返 PASS；Legacy 回退 `UI/46b` 保留；场景零改动） |
+| A57 | P8 卡片框架：`TwinUiWorkspace/PageView/CardView/CardGrid/CardParts` + `TwinUiSurfaceHost` 单实例拆出/归位/最大化/最小化/图钉/Esc + 14 张真实数据卡片 | DONE（`UI/48` 33 项 0 失败，截图 192–195；卡片数据源全部只读：StatusBinder / DigitalTwinRuntime / TwinCommandController 只读字段 / DisassemblySystem / PerformanceProfiler） |
+| A58 | P8 视觉收口：浏览器式三层 + 卡片网格；字阶收敛 11–22、8px 栅格、新令牌 `Panel3/Quiet`；令牌/字阶/圆角审计 + 5 页截图 + V2 性能回归 | DONE（`UI/49` 11 项 0 失败 5 图；`UI/50` UI-off 250.4 / 总览 225.3(4.44 ms) / 三浮窗 222.0(4.50 ms) fps；`Docs/10_AGENT/UI_DESIGN_SYSTEM.md` §13） |
+
+| A59 | P9 散落 UI 收编：性能/拆解/射线/悬停/通信 5 类 IMGUI + 射线/IK 世界 HUD + 欢迎页 + 旧壳/演示路由/旧控制面板，统一关闭并把信息搬进主面板卡片（新增选中对象/IK 预览/控制指令/漫游与操作 4 卡） | DONE（`UI/52` 35 项 0 失败；`UI/51` 盘点 PASS（仅 `UI_二期面板` 活跃、perf onScreenUI=False、ray HUD 未创建）；`F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-07_p9_integration`） |
+| A60 | P9 主面板最小化悬浮球（手机 App 式）：最小化/隐藏时浮出 56×56 可拖动图标，点击恢复正常大小；位置存 `TwinUI.Fab.v1` | DONE（`UI/52` 悬浮球 6 项 PASS + 截图 `222_minimized_fab_1440.png`；关键坑：不能用 SetActive 显隐） |
+| A61 | P9 漫游键鼠完善：WASD 取消"必须右键"、F 聚焦选中、R 复位视角、速度/位姿/键位进卡片与任务栏 | DONE（`UI/52` 漫游 6 项 PASS：WASD 位移 1.088 m、右键 yaw 25.9°、滚轮 2.00→3.00、复位误差 0.000 m；场景未改 `9F907809…`） |
+
+| A62 | P9.5 卡片"网页式"缩放：列数 1/2/3/4（760/1160/1560 断点）、卡片整体等比缩放（0.62–1.40）、行内对齐/整行居中、单卡视觉宽上限 468；浮窗用 `TwinUiDesignScaler` 适配 | DONE（`UI/53` 四档 16 项 0 失败；截图 `230–233`；`F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-07_p9_5_cards`） |
+| A63 | P9.5 卡内多色折线：`TwinUiLineChart`（6 序列/autoRange/阈值虚线/富文本图例/空态）+ 环形缓冲；关节力矩与关节角卡各 6 条彩线 + 数值网格色点 | DONE（`UI/53` chart 4 项 PASS；`TwinUiLineChart.cs` 606 行） |
+| A64 | P9.5 系统入口卡 + 控制指令硬锁 + 卡片拖拽拆出：欢迎页并入 `welcome` 卡；执行按钮需【授权】+Profile+未急停三重门；标题栏拖出 ≥120 px 成浮窗 | DONE（`UI/53` gate 6 项 + drag 3 项 PASS） |
+| A65 | P9.5 悬浮球吸附 + 多显示器/分辨率适配 + VR 适配骨架（无头显 NOT TESTED） | DONE（`UI/53` fab/display/VR 3 项 PASS；`UI/52` 悬浮球 6 项回归 PASS） |
+
+- 2026-11-08 Codex：P10裁切/叠字/中文标题修正已有UI/55实测；视觉待用户确认。后续按工作区迁移16张Legacy卡，保持数据/控制边界。详见E_TJ agent_runs/codex_2026-11-08/ui_repair/README.md。
+
+- 2026-11-08 UI R2：绿色宽片/卡片留白/浮窗可读性已修并经UI/56实测；待用户视觉签收。复杂动态卡、Player/VR与长期性能仍独立验证，见E_TJ ui_repair_r2记录。

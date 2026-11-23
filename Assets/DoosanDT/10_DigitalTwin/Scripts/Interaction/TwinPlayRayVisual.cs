@@ -168,6 +168,23 @@ namespace DigitalTwin.Interaction
         public bool MarkerVisible => _marker != null && _marker.enabled;
         public string HudTextValue => _hudText == null ? string.Empty : _hudText.text;
 
+        /// <summary>P9：关闭/开启射线文字 HUD（V2 把它集成进"选中对象"卡片，故默认关闭）。</summary>
+        public void SetHudEnabled(bool value)
+        {
+            showHud = value;
+            if (_hudCanvas != null)
+            {
+                _hudCanvas.gameObject.SetActive(value);
+            }
+
+            if (!value && _hudText != null)
+            {
+                _hudText.text = string.Empty;
+            }
+
+            Debug.Log("[PLAY-RAY] hud=" + value);
+        }
+
         public event Action<TwinPointerHitInfo> HitChanged;
 
         public bool TryGetHit(out RaycastHit hit, out bool overUi)
@@ -284,7 +301,8 @@ namespace DigitalTwin.Interaction
             _overUi = false;
             _worldRayActive = true;
 
-            Vector3 origin = rayCamera.transform.position + rayCamera.transform.forward * startOffset;
+            float originDepth = Mathf.Max(startOffset, rayCamera.nearClipPlane + 0.05f);
+            Vector3 origin = rayCamera.transform.position + rayCamera.transform.forward * originDepth;
             Ray ray = rayCamera.ScreenPointToRay(screenPosition);
             RaycastHit hitInfo;
             bool hit = Physics.Raycast(ray, out hitInfo, maxDistance, hitLayers.value, QueryTriggerInteraction.Ignore);
@@ -298,6 +316,11 @@ namespace DigitalTwin.Interaction
 
             if (drawWorldRay)
             {
+                // World-unit thickness close to the camera projected to hundreds
+                // of pixels. Bound visual thickness in pixels without changing picking.
+                _line.startWidth = Mathf.Min(startWidth, WorldUnitsPerPixel(originDepth) * 2f);
+                float endDepth = Mathf.Max(originDepth, rayCamera.transform.InverseTransformPoint(end).z);
+                _line.endWidth = Mathf.Min(endWidth, WorldUnitsPerPixel(endDepth) * 2f);
                 _line.enabled = true;
                 _line.SetPosition(0, origin);
                 _line.SetPosition(1, end);
@@ -515,6 +538,13 @@ namespace DigitalTwin.Interaction
             }
         }
 
+        private float WorldUnitsPerPixel(float depth)
+        {
+            float visibleHeight = rayCamera.orthographic ? rayCamera.orthographicSize * 2f
+                : 2f * Mathf.Max(0.001f, depth) * Mathf.Tan(rayCamera.fieldOfView * Mathf.Deg2Rad * 0.5f);
+            return visibleHeight / Mathf.Max(1, rayCamera.pixelHeight);
+        }
+
         private void UpdateMarker(bool hit, Vector3 end, RaycastHit hitInfo, Vector3 rayDirection)
         {
             if (_marker == null)
@@ -534,6 +564,10 @@ namespace DigitalTwin.Interaction
             {
                 radius = Mathf.Clamp(hitInfo.distance * 0.012f, markerRadius * 0.5f, markerRadius * 6f);
             }
+            float depth = Mathf.Max(rayCamera.nearClipPlane, rayCamera.transform.InverseTransformPoint(end).z);
+            float pixel = WorldUnitsPerPixel(depth);
+            radius = Mathf.Min(radius, pixel * 5f);
+            _marker.startWidth = _marker.endWidth = pixel * 1.5f;
 
             Vector3 forward = rayDirection.sqrMagnitude < 0.0001f ? Vector3.forward : rayDirection.normalized;
             Vector3 right = Vector3.Cross(Vector3.up, forward);

@@ -301,6 +301,62 @@ namespace DigitalTwin.Interaction
             ApplyRotation();
         }
 
+        // ------------------------------------------------------------- P9 漫游完善 API
+
+        /// <summary>WASD 是否必须按住右键（V2 起默认改为不需要；视角仍用右键）。</summary>
+        public bool RequireRightMouseForMove => requireRightMouseForMove;
+
+        public bool RequireRightMouseForLook => requireRightMouseForLook;
+
+        /// <summary>P9：WASD 不再要求右键（否则"按 WASD 没反应"）。</summary>
+        public void SetRequireRightMouseForMove(bool value)
+        {
+            requireRightMouseForMove = value;
+            Debug.Log("[PLAY-CAM] requireRightMouseForMove=" + value);
+        }
+
+        /// <summary>P9：视角是否必须右键（默认保持 true，符合桌面习惯）。</summary>
+        public void SetRequireRightMouseForLook(bool value)
+        {
+            requireRightMouseForLook = value;
+        }
+
+        /// <summary>P9：直接设置移动速度（滚轮/滑块/自检调参用）。</summary>
+        public void SetMoveSpeed(float speed)
+        {
+            moveSpeed = Mathf.Clamp(speed, minMoveSpeed, maxMoveSpeed);
+            currentSpeed = moveSpeed;
+        }
+
+        /// <summary>
+        /// P9：把相机拉到某点前方并对准它（"F 聚焦选中对象"）。距离与抬高量取保守值，避免穿模。
+        /// </summary>
+        public void FocusOnPoint(Vector3 point, float distance = 2.4f)
+        {
+            EnsureResolved();
+            if (!_resolved || moveRoot == null)
+            {
+                return;
+            }
+
+            Vector3 from = moveRoot.position - point;
+            from.y = 0f;
+            Vector3 dir = from.sqrMagnitude > 0.0001f ? from.normalized : Vector3.back;
+            Vector3 pos = point - dir * Mathf.Max(0.8f, distance);
+            pos.y = Mathf.Max(pos.y, point.y + 0.85f);
+            moveRoot.position = pos;
+            _targetPosition = pos;
+            _smoothVelocity = Vector3.zero;
+
+            Vector3 look = point - pos;
+            float yaw = Mathf.Atan2(look.x, look.z) * Mathf.Rad2Deg;
+            float pitch = -Mathf.Asin(Mathf.Clamp(look.normalized.y, -1f, 1f)) * Mathf.Rad2Deg;
+            currentYaw = _targetYaw = yaw;
+            currentPitch = _targetPitch = Mathf.Clamp(pitch, pitchMin, pitchMax);
+            ApplyRotation();
+            Debug.Log("[PLAY-CAM] focus point=" + point.ToString("F2") + " cam=" + pos.ToString("F2"));
+        }
+
         /// <summary>测试/自动化入口：直接按确定性输入推进一帧（与 Update 走同一条 Step 通路）。</summary>
         public void StepForTest(TwinPlayInput input, float deltaTime)
         {

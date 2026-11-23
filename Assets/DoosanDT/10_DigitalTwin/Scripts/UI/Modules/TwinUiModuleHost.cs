@@ -179,6 +179,15 @@ namespace DigitalTwin.UI
 
         private void Awake()
         {
+            // P7：V2 工作台模式下本组件整体休眠（旧 dock 条/菜单/悬浮窗由 TwinUiSurfaceHost 接管），
+            // 保证同一时刻只有一个 UI 写者，且 Legacy 模式行为完全不变。
+            if (TwinUiShellMode.IsV2)
+            {
+                enabled = false;
+                Debug.Log(Tag + " dormant: shell mode V2 (TwinUiSurfaceHost owns cards)");
+                return;
+            }
+
             if (Instance != null && Instance != this)
             {
                 Debug.LogWarning(Tag + " duplicate module host, disabled on " + name);

@@ -38,7 +38,7 @@ namespace DigitalTwin.EditorTools
     public static class TwinUIWindowStage
     {
         public const string CanvasPath = "30_界面与交互/UI_二期面板";
-        public const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-05_p2_window";
+        public const string EvidenceRoot = @"F:\new_2026-\zyq_ST_use\E_TJ\agent_runs\dsh_2026-11-09_thesis_delivery\ui\testout\ui_window";
         public const string EvidenceShots = EvidenceRoot + @"\shots";
         public const string StageLogPath = "Logs/ui_window_stage.txt";
         public const string CheckLogPath = "Logs/ui_window_check.txt";

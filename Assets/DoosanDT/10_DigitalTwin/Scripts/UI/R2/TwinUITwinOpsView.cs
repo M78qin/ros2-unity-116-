@@ -1,4 +1,4 @@
-﻿using TMPro;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -545,9 +545,23 @@ namespace DigitalTwin.UI
                 return;
             }
 
-            bool next = !c.IsEmergencyStopped;
-            c.SetEmergencyStopped(next);
-            Log(next ? "已触发急停" : "已解除急停");
+            if (!c.IsEmergencyStopped)
+            {
+                // P0-F3：按下必须真的发远端 HALT（不能只翻本地标记）。
+                var halt = c.EmergencyStop();
+                Log("已触发急停：HALT " + halt.Status + "；远端确认=" + c.RemoteStop + "（闩锁保持）");
+                return;
+            }
+
+            string reason;
+            if (c.TryClearEmergencyStop(out reason))
+            {
+                Log("已解除急停：远端已确认停止");
+            }
+            else
+            {
+                Log("保持闩锁：远端未确认停止 / " + reason);
+            }
         }
 
         private void Log(string message)

@@ -202,6 +202,18 @@ namespace DigitalTwin.Interaction
         public string HudTextValue => _hudText == null ? string.Empty : _hudText.text;
         public bool HudCreated => _hudCreated;
         public GameObject HudCanvasRoot => _hudCanvasRoot;
+
+        /// <summary>P9：关闭/开启 IK 手柄 HUD（V2 把它集成进"IK 预览"卡片，故默认关闭）。</summary>
+        public void SetHudEnabled(bool value)
+        {
+            showHud = value;
+            if (_hudCanvasRoot != null)
+            {
+                _hudCanvasRoot.SetActive(value);
+            }
+
+            Debug.Log("[PLAY-IK] hud=" + value);
+        }
         public int EnterExecuteCalls => _enterExecuteCalls;
         public int PlanEnterAttempts => _planEnterAttempts;
         public int PlanUpdates => _planUpdates;
