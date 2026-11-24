@@ -100,9 +100,16 @@ namespace DigitalTwin
         /// <summary>P9：关闭/开启左上角 OnGUI 调试窗（V2 把通信状态集成进"数据链"卡片，故默认关闭）。</summary>
         public void SetDebugGuiVisible(bool visible)
         {
+            if (showDebugGUI == visible)
+            {
+                return; // no-op when unchanged — prevents per-frame console spam
+            }
+
             showDebugGUI = visible;
             Debug.Log("[DART] debugGUI=" + visible);
         }
+
+        public bool IsDebugGuiVisible => showDebugGUI;
 
         public bool IsTcpConnected => _tcpClient != null && _tcpClient.Connected && _tcpStream != null;
         public bool IsConnected => _running && _lastReceiveNs > 0 && SystemClock.ElapsedMs(_lastReceiveNs, SystemClock.NowNs()) <= connectionTimeoutSec * 1000.0;

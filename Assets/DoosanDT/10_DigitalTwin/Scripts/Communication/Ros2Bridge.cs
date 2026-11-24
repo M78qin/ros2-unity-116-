@@ -184,6 +184,17 @@ namespace DigitalTwin
         private readonly ConcurrentQueue<PendingLatencyPong> _pendingLatencyPongs = new ConcurrentQueue<PendingLatencyPong>();
         private TwinPaperRecorder _paperRecorder;
         private long _droppedLatencyPongs;
+        private readonly object _latencyEchoLock = new object();
+        private long _lastLatencyEchoSeq = -1;
+        private double _lastLatencyEchoRttMs = double.NaN;
+        private long _lastLatencyEchoMonoNs;
+        private float _nextStatusHeartbeatAt;
+        private bool _streamAlertActive;
+        private string _streamAlertReason = string.Empty;
+        private long _heartbeatLastSeq = -1;
+        private float _heartbeatLastSeqChangeAt;
+        private const float StatusHeartbeatSec = 5f;
+        private const float StreamStallAlertSec = 1.5f;
         private readonly object _planStatusLock = new object();
         private string _planStatusJson = string.Empty;
         private long _planStatusReceiveNs;
@@ -297,6 +308,21 @@ namespace DigitalTwin
         public long DroppedFrames => _droppedFrames;
         public long OutOfOrderFrames => _outOfOrderFrames;
         public float FrameRateHz => _frameRateHz;
+
+        /// <summary>
+        /// Last completed latency echo (ROS ping → Unity pong publish).
+        /// rttMs ≈ wall(t2)−wall(t0); true RTT/2 for paper figures comes from VM latency_rtt.csv.
+        /// </summary>
+        public bool TryGetLastLatencyEcho(out long echoSeq, out double rttMs, out long unityMonoMs)
+        {
+            lock (_latencyEchoLock)
+            {
+                echoSeq = _lastLatencyEchoSeq;
+                rttMs = _lastLatencyEchoRttMs;
+                unityMonoMs = _lastLatencyEchoMonoNs / 1_000_000L;
+                return echoSeq >= 0 && !double.IsNaN(rttMs);
+            }
+        }
         public string LastError => _lastError;
         public string LastCommandStatus => _lastCommandStatus;
         public string LastCommandError => _lastCommandError;
@@ -359,6 +385,14 @@ namespace DigitalTwin
 
         /// <summary>收到 /dt/status/motion 时触发：(motionState, receiveNs)。</summary>
         public event Action<string, long> MotionStatusChanged;
+
+        /// <summary>
+        /// Fired once per accepted joint frame (may be ROS callback thread).
+        /// Args: (recvSeq, jointDeg[6], unityReceiveMonoNs, stampSec, stampNanosec)
+        /// where stamp* are the upstream ROS <c>header.stamp</c> (0,0 if missing).
+        /// </summary>
+        public event Action<long, float[], long, int, uint> JointSampleAccepted;
+
         public string LatencyPingTopic => latencyPingTopic;
         public string LatencyPongTopic => latencyPongTopic;
         public long DroppedLatencyPongs => Interlocked.Read(ref _droppedLatencyPongs);
@@ -667,6 +701,110 @@ namespace DigitalTwin
         private void Update()
         {
             FlushLatencyPongsOnMainThread();
+            UpdateStreamWatchdogAndHeartbeat();
+        }
+
+        private void OnGUI()
+        {
+            if (!_streamAlertActive)
+            {
+                return;
+            }
+
+            float w = Mathf.Min(720f, Screen.width - 40f);
+            var rect = new Rect(20f, 20f, w, 64f);
+            GUI.color = new Color(1f, 0.15f, 0.1f, 0.92f);
+            GUI.Box(rect, GUIContent.none);
+            GUI.color = Color.white;
+            var style = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 22,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                wordWrap = true
+            };
+            GUI.Label(rect, "[DT-ALERT] " + _streamAlertReason, style);
+        }
+
+        private void UpdateStreamWatchdogAndHeartbeat()
+        {
+            long seq = _lastSourceSeq;
+            if (seq != _heartbeatLastSeq)
+            {
+                _heartbeatLastSeq = seq;
+                _heartbeatLastSeqChangeAt = Time.unscaledTime;
+            }
+
+            bool linkUp = IsLinkConnected;
+            bool streaming = _telemetryStreamEnabled && _running;
+            float sinceSeq = _heartbeatLastSeqChangeAt <= 0f
+                ? float.PositiveInfinity
+                : (Time.unscaledTime - _heartbeatLastSeqChangeAt);
+
+            string alert = null;
+            if (_running && !linkUp)
+            {
+                alert = "虚实 TCP 断连！";
+            }
+            else if (streaming && linkUp && _heartbeatLastSeq >= 0 && sinceSeq > StreamStallAlertSec)
+            {
+                alert = "RT 数据流中断/冻结（>" + StreamStallAlertSec.ToString("0.0") + "s 无新 seq）！";
+            }
+
+            if (alert != null)
+            {
+                if (!_streamAlertActive || _streamAlertReason != alert)
+                {
+                    _streamAlertActive = true;
+                    _streamAlertReason = alert;
+                    Debug.LogError("[DT-ALERT] 虚实连接或 RT 数据流中断！ " + alert);
+                }
+            }
+            else if (_streamAlertActive)
+            {
+                _streamAlertActive = false;
+                _streamAlertReason = string.Empty;
+                Debug.Log("[DT-Status] alert cleared — link/stream recovered.");
+            }
+
+            if (Time.unscaledTime < _nextStatusHeartbeatAt)
+            {
+                return;
+            }
+
+            _nextStatusHeartbeatAt = Time.unscaledTime + StatusHeartbeatSec;
+            string link = linkUp ? "LINK_UP" : "LINK_DOWN";
+
+            // LINK_DOWN or >1.5s without a new frame: never show stale Hz or idle-gap-as-RTT.
+            bool streamStale = !linkUp || sinceSeq > StreamStallAlertSec;
+            string hzText;
+            string rttText;
+            if (streamStale)
+            {
+                hzText = "0.0 Hz";
+                rttText = "N/A";
+            }
+            else
+            {
+                hzText = _frameRateHz.ToString("0.0") + " Hz";
+                if (TryGetLastLatencyEcho(out _, out double rttMs, out _) && rttMs >= 0d && rttMs < 60_000d)
+                {
+                    rttText = rttMs.ToString("0.#") + " ms";
+                }
+                else
+                {
+                    rttText = "N/A";
+                }
+            }
+
+            string cmd = string.IsNullOrEmpty(_lastCommandStatus) ? "-" : _lastCommandStatus;
+            Debug.Log(
+                "[DT-Status] " + link
+                + " | " + hzText
+                + " | RTT " + rttText
+                + " | lock=none(adapter)"
+                + " | cmd=" + cmd
+                + " | seq=" + seq);
         }
 
         private void OnDisable()
@@ -1099,6 +1237,20 @@ namespace DigitalTwin
                     status = "ERROR";
                     error = ex.Message;
                     _lastError = error;
+                }
+
+                if (status == "SENT")
+                {
+                    double echoMs = t2WallMs - pending.Ping.T0WallMs;
+                    if (echoMs >= 0 && echoMs < 60_000)
+                    {
+                        lock (_latencyEchoLock)
+                        {
+                            _lastLatencyEchoSeq = pending.Ping.Sequence;
+                            _lastLatencyEchoRttMs = echoMs;
+                            _lastLatencyEchoMonoNs = t2MonoNs;
+                        }
+                    }
                 }
 
                 RecordLatencyEvent(
@@ -1615,6 +1767,32 @@ namespace DigitalTwin
             _frames.Enqueue(frame);
             _lastReceiveNs = receiveNs;
             UpdateStats(frame);
+
+            // One notification per accepted sample (thread-safe listeners must queue).
+            var accepted = JointSampleAccepted;
+            if (accepted != null && frame.JointPositionRad != null && frame.JointPositionRad.Length >= 6)
+            {
+                float[] deg = new float[6];
+                for (int i = 0; i < 6; i++)
+                {
+                    deg[i] = frame.JointPositionRad[i] * Mathf.Rad2Deg;
+                }
+                int stampSec = 0;
+                uint stampNanosec = 0u;
+                if (msg?.header?.stamp != null)
+                {
+                    stampSec = Convert.ToInt32(msg.header.stamp.sec, CultureInfo.InvariantCulture);
+                    stampNanosec = Convert.ToUInt32(msg.header.stamp.nanosec, CultureInfo.InvariantCulture);
+                }
+                try
+                {
+                    accepted.Invoke(frame.SequenceId, deg, receiveNs, stampSec, stampNanosec);
+                }
+                catch (Exception ex)
+                {
+                    _lastError = "JointSampleAccepted: " + ex.Message;
+                }
+            }
         }
 
         private void ApplyJointState(JointStateMsg joint, RobotStateFrame frame)

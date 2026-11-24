@@ -160,9 +160,10 @@ namespace DigitalTwin.UI
                 }
             }
 
-            if (_dart != null)
+            if (_dart != null && _dart.IsDebugGuiVisible)
             {
                 _dart.SetDebugGuiVisible(false);
+                _suppressCount++;
             }
 
             if (_rayVisual != null && _rayVisual.ShowHud)
