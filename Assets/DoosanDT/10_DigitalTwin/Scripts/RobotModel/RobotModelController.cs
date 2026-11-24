@@ -154,6 +154,40 @@ namespace DigitalTwin
         [SerializeField, Tooltip("是否允许运行时真实/仿真数据驱动 Live Robot。关闭后 ApplyStateFrame 不会更新模型。")]
         private bool enableLiveView = true;
 
+        [SerializeField, Tooltip("Live 关节平滑：关=ZOH 直接跳目标；开=指数阻尼逼近，抑制 TCP 微抖动/闪现。")]
+        private bool enableLiveJointSmoothing = true;
+
+        [SerializeField, Range(1f, 40f), Tooltip("平滑带宽 (1/s)。越大越跟手、越小越稳。建议 12–20。")]
+        private float liveSmoothHz = 16f;
+
+        [SerializeField, Tooltip("对比开关：强制 ZOH（忽略 enableLiveJointSmoothing），便于 A/B。")]
+        private bool forceLiveZohCompare = false;
+
+        [Header("Live Visual Rate Limit / 视觉角速度限幅（防猛闪）")]
+        [SerializeField, Tooltip("单关节最大视觉角速度 (deg/s)。数据空洞/大跳变后按此斜率追赶，避免 50 ms 内瞬移。建议 45–60；0=不限幅。")]
+        private float maxVisualAngularSpeedDegPerSec = 60f;
+
+        [SerializeField, Tooltip("是否在主循环每帧步进视觉姿态（与底层帧到达解耦，避免被 60 Hz/UI 刷新节流）。")]
+        private bool enablePerFrameVisualStep = true;
+
+        [SerializeField, Tooltip("单帧目标跳变超过阈值时打印一次诊断日志，便于回放核验空洞复现。")]
+        private bool logLargeTargetJumpOnce = true;
+
+        [SerializeField, Tooltip("目标跳变诊断阈值 (deg)。正常 100 Hz 连续流单帧变化远小于此值；数据空洞后才会触发。")]
+        private float largeTargetJumpWarnDeg = 5f;
+
+        private float[] _smoothDisplayDeg;
+        private float[] _pendingTargetDisplayDeg;
+        private bool _hasPendingLiveTarget;
+        private float _lastJumpLogAt = -999f;
+        private float _clampDiagUntil = -999f;
+        private float _clampDiagJumpDeg;
+        private float _clampDiagMaxStepDeg;
+        private int _clampDiagFrames;
+        private float _clampDiagStartAt = -999f;
+        private float[] _lastFrameTargetDeg;
+        private float _lastFrameJumpLogAt = -999f;
+
         [Header("Ghost View / 影子模型")]
         [SerializeField, Tooltip("是否启用 Ghost 机器人显示。当前只保留轻量材质/Renderer 开关，轨迹规划后续扩展。")]
         private bool enableGhostView;
@@ -219,6 +253,11 @@ namespace DigitalTwin
             EnsureRuntimeArrays();
             if (Application.isPlaying)
             {
+                Debug.Log(
+                    $"[RobotModelController] live visual: smoothing={enableLiveJointSmoothing} " +
+                    $"hz={liveSmoothHz:F1} perFrameStep={enablePerFrameVisualStep} " +
+                    $"rateLimit={maxVisualAngularSpeedDegPerSec:F1}deg/s jointSmoothingOn={enableLiveJointSmoothing}",
+                    this);
                 PrepareRuntimeStartupPose();
             }
         }
@@ -242,6 +281,18 @@ namespace DigitalTwin
             if (!Application.isPlaying)
             {
                 _startupPoseAppliedThisPlay = false;
+            }
+        }
+
+        /// <summary>
+        /// Per-frame visual step at the render rate (independent of ROS frame arrival and UI refresh),
+        /// with per-joint angular-velocity clamping so gap-induced target jumps cannot flash.
+        /// </summary>
+        private void LateUpdate()
+        {
+            if (enablePerFrameVisualStep)
+            {
+                TickLiveVisual(Time.unscaledDeltaTime);
             }
         }
 
@@ -452,13 +503,186 @@ namespace DigitalTwin
         public bool ApplyStateFrame(RobotStateFrame frame)
         {
             if (!enableLiveView || frame == null || frame.JointPositionRad == null) return false;
-            bool applied = ApplyJointRadians(frame.JointPositionRad, PoseSource.RuntimeLive);
+            bool applied = ApplyJointRadiansLive(frame.JointPositionRad);
             if (applied)
             {
-                frame.ModelTargetDisplayDeg = GetTargetJointDegreesCopy();
+                EnsureFloatArray(ref _lastFrameTargetDeg, JointCount);
+                if (_hasPendingLiveTarget && _pendingTargetDisplayDeg != null && _lastFrameTargetDeg != null)
+                {
+                    float jmax = 0f;
+                    int jidx = -1;
+                    for (int i = 0; i < JointCount; i++)
+                    {
+                        float d = Mathf.Abs(Mathf.DeltaAngle(_lastFrameTargetDeg[i], _pendingTargetDisplayDeg[i]));
+                        if (float.IsNaN(_lastFrameTargetDeg[i])) d = float.PositiveInfinity;
+                        if (d > jmax) { jmax = d; jidx = i; }
+                        _lastFrameTargetDeg[i] = _pendingTargetDisplayDeg[i];
+                    }
+                    if (Time.unscaledTime - _lastFrameJumpLogAt > 0.5f && jmax >= 1.5f)
+                    {
+                        _lastFrameJumpLogAt = Time.unscaledTime;
+                        Debug.Log(
+                            $"[RobotModelController] frame target jump {jmax:F2} deg on J{jidx + 1} " +
+                            $"(smoothing={enableLiveJointSmoothing}, zoh={forceLiveZohCompare}, perFrame={enablePerFrameVisualStep})",
+                            this);
+                        if (jmax >= Mathf.Clamp(largeTargetJumpWarnDeg, 1f, 5f))
+                        {
+                            _clampDiagUntil = Time.unscaledTime + 4f;
+                            _clampDiagStartAt = Time.unscaledTime;
+                            _clampDiagJumpDeg = jmax;
+                            _clampDiagMaxStepDeg = 0f;
+                            _clampDiagFrames = 0;
+                            Debug.LogWarning(
+                                $"[RobotModelController] anti-flash clamp: target jump {jmax:F1} deg; " +
+                                $"visual rate limited to {maxVisualAngularSpeedDegPerSec:F1} deg/s.", this);
+                        }
+                    }
+                }
+                // Report the commanded target (pending), not the rate-limited display pose.
+                frame.ModelTargetDisplayDeg = GetLiveCommandTargetCopy();
                 frame.MarkAppliedNow();
             }
             return applied;
+        }
+
+        private float[] GetLiveCommandTargetCopy()
+        {
+            EnsureRuntimeArrays();
+            if (_hasPendingLiveTarget && _pendingTargetDisplayDeg != null)
+            {
+                float[] copy = new float[_pendingTargetDisplayDeg.Length];
+                Array.Copy(_pendingTargetDisplayDeg, copy, copy.Length);
+                return copy;
+            }
+            return GetTargetJointDegreesCopy();
+        }
+
+        /// <summary>
+        /// RuntimeLive path with optional exponential smoothing (vs ZOH).
+        /// </summary>
+        private bool ApplyJointRadiansLive(float[] jointRadians)
+        {
+            if (jointRadians == null) return false;
+            EnsureRuntimeArrays();
+            int count = Mathf.Min(jointRadians.Length, JointCount);
+            if (count <= 0) return false;
+
+            EnsureFloatArray(ref _runtimeDisplayDegBuffer, JointCount);
+            float[] targetDeg = _runtimeDisplayDegBuffer;
+            for (int i = 0; i < count; i++)
+            {
+                float compensatedRad = jointRadians[i] + (signalSchema == null ? 0f : signalSchema.GetCalibrationOffsetRad(i));
+                targetDeg[i] = ConvertRobotRadToDisplayDeg(i, compensatedRad);
+            }
+
+            bool useSmooth = enableLiveJointSmoothing && !forceLiveZohCompare && Application.isPlaying;
+            if (!useSmooth)
+            {
+                return ApplyJointDisplayDegrees(targetDeg, false, PoseSource.RuntimeLive, true, false);
+            }
+
+            EnsureFloatArray(ref _smoothDisplayDeg, JointCount);
+            EnsureFloatArray(ref _pendingTargetDisplayDeg, JointCount);
+            if (_smoothDisplayDeg == null || _currentDisplayDegCache == null || _pendingTargetDisplayDeg == null)
+            {
+                return ApplyJointDisplayDegrees(targetDeg, false, PoseSource.RuntimeLive, true, false);
+            }
+
+            // Seed from current pose on first frame / size change.
+            for (int i = 0; i < JointCount; i++)
+            {
+                if (float.IsNaN(_smoothDisplayDeg[i]))
+                {
+                    _smoothDisplayDeg[i] = _currentDisplayDegCache[i];
+                }
+            }
+
+            // Store target only. The visual pose is stepped every rendered frame in LateUpdate
+            // (rate-limited), so a multi-second data gap cannot produce a single-frame teleport.
+            float maxJump = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                _pendingTargetDisplayDeg[i] = targetDeg[i];
+                float jump = Mathf.Abs(Mathf.DeltaAngle(_smoothDisplayDeg[i], targetDeg[i]));
+                if (jump > maxJump) maxJump = jump;
+            }
+            _hasPendingLiveTarget = true;
+            if (logLargeTargetJumpOnce && maxJump >= Mathf.Max(1f, largeTargetJumpWarnDeg) &&
+                Time.unscaledTime - _lastJumpLogAt > 1f)
+            {
+                _lastJumpLogAt = Time.unscaledTime;
+                _clampDiagUntil = Time.unscaledTime + 4f;
+                _clampDiagStartAt = Time.unscaledTime;
+                _clampDiagJumpDeg = maxJump;
+                _clampDiagMaxStepDeg = 0f;
+                _clampDiagFrames = 0;
+                Debug.LogWarning(
+                    $"[RobotModelController] anti-flash clamp: target jump {maxJump:F1} deg; " +
+                    $"visual rate limited to {maxVisualAngularSpeedDegPerSec:F1} deg/s.", this);
+            }
+            if (!enablePerFrameVisualStep)
+            {
+                float dti = Mathf.Clamp(Time.unscaledDeltaTime, 1f / 1000f, 0.25f);
+                float alphaI = 1f - Mathf.Exp(-Mathf.Max(0.1f, liveSmoothHz) * dti);
+                for (int i = 0; i < count; i++)
+                {
+                    _smoothDisplayDeg[i] = Mathf.LerpAngle(_smoothDisplayDeg[i], _pendingTargetDisplayDeg[i], alphaI);
+                }
+                return ApplyJointDisplayDegrees(_smoothDisplayDeg, false, PoseSource.RuntimeLive, true, false);
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Per-frame visual stepping (rate-limited). Called from LateUpdate so it runs after the
+        /// runtime has posted the newest target, at full frame rate and independent of the
+        /// source/UI refresh timers. Returns true when the model was updated this frame.
+        /// </summary>
+        public bool TickLiveVisual(float dt)
+        {
+            if (!Application.isPlaying || !enableLiveView) return false;
+            if (!enableLiveJointSmoothing || forceLiveZohCompare) return false;
+            if (!_hasPendingLiveTarget || _pendingTargetDisplayDeg == null) return false;
+            if (_currentDisplayDegCache == null) return false;
+            if (!CanAcceptPoseSource(PoseSource.RuntimeLive)) return false;
+
+            int count = JointCount;
+            dt = Mathf.Clamp(dt, 1f / 1000f, 0.25f);
+            float alpha = 1f - Mathf.Exp(-Mathf.Max(0.1f, liveSmoothHz) * dt);
+            float maxStep = maxVisualAngularSpeedDegPerSec > 0f
+                ? maxVisualAngularSpeedDegPerSec * dt
+                : float.PositiveInfinity;
+
+            bool any = false;
+            for (int i = 0; i < count; i++)
+            {
+                float cur = float.IsNaN(_smoothDisplayDeg[i]) ? _currentDisplayDegCache[i] : _smoothDisplayDeg[i];
+                if (float.IsNaN(cur)) cur = 0f;
+                float desired = Mathf.LerpAngle(cur, _pendingTargetDisplayDeg[i], alpha);
+                float next = float.IsInfinity(maxStep) ? desired : Mathf.MoveTowardsAngle(cur, desired, maxStep);
+                float stepDeg = Mathf.Abs(Mathf.DeltaAngle(cur, next));
+                if (stepDeg > 1e-5f) any = true;
+                if (Time.unscaledTime <= _clampDiagUntil)
+                {
+                    if (stepDeg > _clampDiagMaxStepDeg) _clampDiagMaxStepDeg = stepDeg;
+                    _clampDiagFrames++;
+                }
+                _smoothDisplayDeg[i] = next;
+            }
+
+            if (_clampDiagUntil > 0f && Time.unscaledTime > _clampDiagUntil && _clampDiagFrames > 0)
+            {
+                Debug.Log(
+                    $"[RobotModelController] clamp convergence: jump={_clampDiagJumpDeg:F1} deg, " +
+                    $"catchup={Time.unscaledTime - _clampDiagStartAt:F2} s, " +
+                    $"maxPerJointPerFrame={_clampDiagMaxStepDeg:F3} deg, frames={_clampDiagFrames}, " +
+                    $"bound={(maxVisualAngularSpeedDegPerSec * Mathf.Clamp(Time.unscaledDeltaTime, 1f / 1000f, 0.25f)):F3} deg/frame",
+                    this);
+                _clampDiagUntil = -999f;
+                _clampDiagFrames = 0;
+            }
+            if (!any) return false;
+            return ApplyJointDisplayDegrees(_smoothDisplayDeg, false, PoseSource.RuntimeLive, true, false);
         }
 
         public bool ApplyJointRadians(float[] jointRadians)
@@ -955,6 +1179,19 @@ namespace DigitalTwin
             EnsureFloatArray(ref _currentDisplayDegCache, joints.Length);
             EnsureFloatArray(ref _lastTargetDisplayDegCache, joints.Length);
             EnsureFloatArray(ref _runtimeDisplayDegBuffer, joints.Length);
+            EnsureFloatArray(ref _pendingTargetDisplayDeg, joints.Length);
+            EnsureSmoothArray(joints.Length);
+        }
+
+        private void EnsureSmoothArray(int count)
+        {
+            if (_smoothDisplayDeg != null && _smoothDisplayDeg.Length == count) return;
+            float[] old = _smoothDisplayDeg;
+            _smoothDisplayDeg = new float[count];
+            for (int i = 0; i < count; i++)
+            {
+                _smoothDisplayDeg[i] = (old != null && i < old.Length) ? old[i] : float.NaN;
+            }
         }
 
         private static void EnsureFloatArray(ref float[] array, int count)

@@ -38,8 +38,14 @@ namespace DigitalTwin
 
         [SerializeField] private int rosTcpPort = 10002;
 
-        [SerializeField, Tooltip("超过多少秒没有收到 joint_states 视为连接中断。")]
-        private float connectionTimeoutSec = 2f;
+        [SerializeField, Tooltip("超过多少秒没有收到 joint_states 视为「流陈旧」(stream stale)。不再直接把 TCP 链路上报为未连接，避免运动尖峰误闪「未连接」。")]
+        private float connectionTimeoutSec = 3.5f;
+
+        [SerializeField, Tooltip("流陈旧告警阈值（秒）。须小于 connectionTimeoutSec 才会先告警、后判陈旧。")]
+        private float streamStallAlertSec = 1.5f;
+
+        [SerializeField, Tooltip("告警清除滞后（秒）：恢复发包后需连续低于此空档才清告警，防抖闪。")]
+        private float streamStallClearSec = 0.35f;
 
         [SerializeField, Tooltip("源队列上限。超过时会丢弃旧帧，防止主线程被积压压垮。")]
         private int maxQueueSize = 2048;
@@ -111,6 +117,8 @@ namespace DigitalTwin
         [SerializeField] private string modeStatusTopic = "/dt/status/mode";
         [SerializeField] private string motionStatusTopic = "/dt/status/motion";
         [SerializeField] private string sessionStatusTopic = "/dt/status/session";
+        [SerializeField, Tooltip("E5 gate JSON (SAFE_Z_REJECT / TORQUE_LIMIT_PAUSE / NORMAL). Feeds TwinUIStatusBinder alarms.")]
+        private string gateTraceTopic = "/dt/status/gate_trace";
 
         [Header("Paper-grade latency probe")]
         [SerializeField, Tooltip("ROS2 sends String JSON ping here; Unity records t1 before queuing the pong.")]
@@ -172,6 +180,9 @@ namespace DigitalTwin
         private string _mode = "unknown";
         private string _motion = "unknown";
         private string _motionError = string.Empty;
+        private string _lastGateStatus = "NORMAL";
+        private string _lastGateReason = string.Empty;
+        private float _maxJointTorqueNm;
         private bool _publishersRegistered;
         private bool _telemetryStreamEnabled;
         private readonly Dictionary<string, float[]> _rtCache = new Dictionary<string, float[]>();
@@ -194,7 +205,6 @@ namespace DigitalTwin
         private long _heartbeatLastSeq = -1;
         private float _heartbeatLastSeqChangeAt;
         private const float StatusHeartbeatSec = 5f;
-        private const float StreamStallAlertSec = 1.5f;
         private readonly object _planStatusLock = new object();
         private string _planStatusJson = string.Empty;
         private long _planStatusReceiveNs;
@@ -256,25 +266,24 @@ namespace DigitalTwin
         public bool IsLinkConnected =>
             _running && _ros != null && _ros.HasConnectionThread && !_ros.HasConnectionError;
 
-        public bool IsConnected
+        /// <summary>
+        /// TCP transport connected. Independent of joint-stream freshness so brief RT stalls
+        /// do not flip the UI to「未连接」/ flicker the twin.
+        /// </summary>
+        public bool IsConnected => IsLinkConnected;
+
+        /// <summary>True when joint telemetry arrived within connectionTimeoutSec.</summary>
+        public bool IsStreamFresh
         {
             get
             {
-                bool rosConnected = _ros != null && _ros.HasConnectionThread && !_ros.HasConnectionError;
-                if (!_running || !rosConnected)
+                if (!_running || !_telemetryStreamEnabled || _lastReceiveNs <= 0)
                 {
                     return false;
                 }
 
-                if (!_telemetryStreamEnabled)
-                {
-                    return true;
-                }
-
-                bool hasRecentFrame = _lastReceiveNs > 0 &&
-                                      SystemClock.ElapsedMs(_lastReceiveNs, SystemClock.NowNs()) <=
-                                      connectionTimeoutSec * 1000.0;
-                return hasRecentFrame;
+                return SystemClock.ElapsedMs(_lastReceiveNs, SystemClock.NowNs()) <=
+                       connectionTimeoutSec * 1000.0;
             }
         }
 
@@ -299,6 +308,41 @@ namespace DigitalTwin
             get
             {
                 lock (_statusLock) return _motionError;
+            }
+        }
+
+        /// <summary>Latest E5 gate_status from /dt/status/gate_trace (NORMAL / SAFE_Z_REJECT / TORQUE_LIMIT_PAUSE / …).</summary>
+        public string LastGateStatus
+        {
+            get
+            {
+                lock (_statusLock) return _lastGateStatus;
+            }
+        }
+
+        public string LastGateReason
+        {
+            get
+            {
+                lock (_statusLock) return _lastGateReason;
+            }
+        }
+
+        /// <summary>Max |τ| across 6 joints from latest RT actual_joint_torque / effort (N·m).</summary>
+        public float MaxJointTorqueNm
+        {
+            get
+            {
+                lock (_statusLock) return _maxJointTorqueNm;
+            }
+        }
+
+        /// <summary>Latest TCP wrench [fx,fy,fz,mx,my,mz] if available.</summary>
+        public float[] LatestForceVector
+        {
+            get
+            {
+                lock (_statusLock) return _latestForce != null ? (float[])_latestForce.Clone() : Array.Empty<float>();
             }
         }
 
@@ -737,6 +781,8 @@ namespace DigitalTwin
 
             bool linkUp = IsLinkConnected;
             bool streaming = _telemetryStreamEnabled && _running;
+            float stallSec = Mathf.Max(0.25f, streamStallAlertSec);
+            float clearSec = Mathf.Clamp(streamStallClearSec, 0.05f, stallSec);
             float sinceSeq = _heartbeatLastSeqChangeAt <= 0f
                 ? float.PositiveInfinity
                 : (Time.unscaledTime - _heartbeatLastSeqChangeAt);
@@ -746,9 +792,10 @@ namespace DigitalTwin
             {
                 alert = "虚实 TCP 断连！";
             }
-            else if (streaming && linkUp && _heartbeatLastSeq >= 0 && sinceSeq > StreamStallAlertSec)
+            else if (streaming && linkUp && _heartbeatLastSeq >= 0 && sinceSeq > stallSec)
             {
-                alert = "RT 数据流中断/冻结（>" + StreamStallAlertSec.ToString("0.0") + "s 无新 seq）！";
+                // Stream stall only — keep IsConnected=true (link still up) to avoid UI「未连接」闪现。
+                alert = "RT 数据流中断/冻结（>" + stallSec.ToString("0.0") + "s 无新 seq）！";
             }
 
             if (alert != null)
@@ -762,9 +809,13 @@ namespace DigitalTwin
             }
             else if (_streamAlertActive)
             {
-                _streamAlertActive = false;
-                _streamAlertReason = string.Empty;
-                Debug.Log("[DT-Status] alert cleared — link/stream recovered.");
+                // Hysteresis: only clear after a short fresh window (anti-flicker).
+                if (sinceSeq <= clearSec)
+                {
+                    _streamAlertActive = false;
+                    _streamAlertReason = string.Empty;
+                    Debug.Log("[DT-Status] alert cleared — link/stream recovered.");
+                }
             }
 
             if (Time.unscaledTime < _nextStatusHeartbeatAt)
@@ -774,14 +825,20 @@ namespace DigitalTwin
 
             _nextStatusHeartbeatAt = Time.unscaledTime + StatusHeartbeatSec;
             string link = linkUp ? "LINK_UP" : "LINK_DOWN";
+            string fresh = IsStreamFresh ? "FRESH" : "STALE";
 
-            // LINK_DOWN or >1.5s without a new frame: never show stale Hz or idle-gap-as-RTT.
-            bool streamStale = !linkUp || sinceSeq > StreamStallAlertSec;
+            // Only zero Hz when truly disconnected; stale stream keeps last Hz estimate + STALE tag.
+            bool streamStale = !linkUp || sinceSeq > stallSec;
             string hzText;
             string rttText;
-            if (streamStale)
+            if (!linkUp)
             {
                 hzText = "0.0 Hz";
+                rttText = "N/A";
+            }
+            else if (streamStale)
+            {
+                hzText = _frameRateHz.ToString("0.0") + " Hz*";
                 rttText = "N/A";
             }
             else
@@ -800,6 +857,7 @@ namespace DigitalTwin
             string cmd = string.IsNullOrEmpty(_lastCommandStatus) ? "-" : _lastCommandStatus;
             Debug.Log(
                 "[DT-Status] " + link
+                + " | " + fresh
                 + " | " + hzText
                 + " | RTT " + rttText
                 + " | lock=none(adapter)"
@@ -1170,6 +1228,16 @@ namespace DigitalTwin
             float[] copy = new float[msg.data.Length];
             Array.Copy(msg.data, copy, msg.data.Length);
             _rtCache[key] = copy;
+            if (key == "actual_joint_torque" || key == "external_joint_torque")
+            {
+                float maxAbs = 0f;
+                for (int i = 0; i < copy.Length; i++)
+                {
+                    float a = Mathf.Abs(copy[i]);
+                    if (a > maxAbs) maxAbs = a;
+                }
+                lock (_statusLock) _maxJointTorqueNm = maxAbs;
+            }
         }
 
         // Callback thread: timestamp t1 immediately, then defer ROS publication and recorder access
@@ -1438,6 +1506,82 @@ namespace DigitalTwin
             if (!_ros.HasSubscriber(planStatusTopic))
             {
                 _ros.Subscribe<StringMsg>(planStatusTopic, OnPlanStatus);
+            }
+
+            if (!string.IsNullOrWhiteSpace(gateTraceTopic) && !_ros.HasSubscriber(gateTraceTopic))
+            {
+                _ros.Subscribe<StringMsg>(gateTraceTopic, OnGateTrace);
+            }
+        }
+
+        [Serializable]
+        private sealed class GateTraceDto
+        {
+            public string gate_status;
+            public string reject_reason;
+            public float[] wrench;
+            public float[] tau;
+        }
+
+        private void OnGateTrace(StringMsg msg)
+        {
+            if (msg == null || string.IsNullOrWhiteSpace(msg.data))
+            {
+                return;
+            }
+
+            try
+            {
+                GateTraceDto dto = JsonUtility.FromJson<GateTraceDto>(msg.data);
+                if (dto == null)
+                {
+                    return;
+                }
+
+                string gate = string.IsNullOrWhiteSpace(dto.gate_status) ? "NORMAL" : dto.gate_status.Trim();
+                string reason = dto.reject_reason ?? string.Empty;
+                lock (_statusLock)
+                {
+                    _lastGateStatus = gate;
+                    _lastGateReason = reason;
+                    if (gate == "TORQUE_LIMIT_PAUSE" || gate == "SAFE_Z_REJECT")
+                    {
+                        _motion = gate;
+                        _motionError = string.IsNullOrEmpty(reason) ? gate : gate + "|" + reason;
+                    }
+                    else if (gate == "NORMAL" || gate == "ACCEPTED" || gate == "DRY_RUN_PASS" || gate == "PASS")
+                    {
+                        // Keep motion stream authoritative; only clear gate-owned error text.
+                        if (_motionError != null &&
+                            (_motionError.StartsWith("TORQUE_LIMIT_PAUSE", StringComparison.Ordinal) ||
+                             _motionError.StartsWith("SAFE_Z_REJECT", StringComparison.Ordinal)))
+                        {
+                            _motionError = string.Empty;
+                        }
+                    }
+
+                    if (dto.wrench != null && dto.wrench.Length >= 6)
+                    {
+                        _latestForce = dto.wrench;
+                        _rtCache["external_tcp_force"] = dto.wrench;
+                    }
+
+                    if (dto.tau != null && dto.tau.Length > 0)
+                    {
+                        _rtCache["actual_joint_torque"] = dto.tau;
+                        float maxAbs = 0f;
+                        for (int i = 0; i < dto.tau.Length; i++)
+                        {
+                            float a = Mathf.Abs(dto.tau[i]);
+                            if (a > maxAbs) maxAbs = a;
+                        }
+                        _maxJointTorqueNm = maxAbs;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _lastError = ex.Message;
             }
         }
 
@@ -1907,6 +2051,22 @@ namespace DigitalTwin
             {
                 frame.JointTorqueNm = jt;
                 frame.Flags |= RobotFrameFlags.HasJointTorque;
+            }
+            else if (_rtCache.TryGetValue("actual_joint_torque", out float[] ajt) && ajt.Length > 0)
+            {
+                frame.JointTorqueNm = ajt;
+                frame.Flags |= RobotFrameFlags.HasJointTorque;
+            }
+
+            if (frame.JointTorqueNm != null && frame.JointTorqueNm.Length > 0)
+            {
+                float maxAbs = 0f;
+                for (int i = 0; i < frame.JointTorqueNm.Length; i++)
+                {
+                    float a = Mathf.Abs(frame.JointTorqueNm[i]);
+                    if (a > maxAbs) maxAbs = a;
+                }
+                lock (_statusLock) _maxJointTorqueNm = maxAbs;
             }
 
             if (_rtCache.TryGetValue("actual_tcp_position", out float[] tcp) && tcp.Length >= 6)
