@@ -117,7 +117,7 @@ namespace DigitalTwin.UI
                 _sourceValue.overflowMode = TextOverflowModes.Ellipsis;
                 _sourceValue.margin = new Vector4(0,0,16,0);
             }
-            Set(_rateValue, s.Hz > 0.01 ? s.Hz.ToString("F1") + " Hz" : "—");
+            Set(_rateValue, s.Hz > 0.01 ? "ROS: " + s.Hz.ToString("F1") + " Hz" : "ROS: —");
             Set(_latencyValue, s.HasFrame ? s.LatencyMs.ToString("F1") + " ms" : "—");
             Set(_ageValue, s.HasFrame ? s.AgeMs.ToString("F0") + " ms" : "—");
 

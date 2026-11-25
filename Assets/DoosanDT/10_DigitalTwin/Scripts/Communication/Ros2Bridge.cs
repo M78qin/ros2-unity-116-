@@ -520,6 +520,41 @@ namespace DigitalTwin
             }
         }
 
+        /// <summary>E-BiDir trigger topic: Unity -> ROS marker with a send timestamp.</summary>
+        public const string BiDirTriggerTopic = "/dt/exp/bidir_trigger";
+
+        /// <summary>
+        /// Publishes one E-BiDir trigger (String JSON: seq + t_unity_ms).
+        /// Only used by the Editor menu for latency measurement; the VM-side
+        /// executor owns the motion, this method commands nothing.
+        /// </summary>
+        private bool _biDirRegistered;
+
+        public bool PublishBiDirTrigger(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return false;
+            }
+            try
+            {
+                EnsureRosConnection();
+                if (!_biDirRegistered)
+                {
+                    _ros.RegisterPublisher<StringMsg>(BiDirTriggerTopic);
+                    _biDirRegistered = true;
+                }
+                _ros.Publish(BiDirTriggerTopic, new StringMsg { data = json });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _lastError = ex.Message;
+                Debug.LogWarning("[BiDir] publish failed: " + ex.Message);
+                return false;
+            }
+        }
+
         public bool PublishPlanRequest(string json)
         {
             return PublishPlanString(planRequestTopic, json);
