@@ -394,7 +394,13 @@ public class SmartRaycaster : MonoBehaviour
         {
             var part = hit.collider.GetComponentInParent<DisassemblyPart>();
             if (part == null || part.isCompleted) continue;
-            if (!DisassemblySystem.Instance.CheckInteractability(part)) continue;
+            if (!DisassemblySystem.Instance.CheckInteractability(part))
+            {
+                // Step-2 permission interlock: surface the refusal (throttled per part).
+                // Read-only signal -- nothing on this path may reach a ROS command topic.
+                DisassemblyPermissionEvents.NotifyDenied(part, "not-interactable", "raycast");
+                continue;
+            }
 
             _cachedHitPart = part;
             hoveredPart = part;
@@ -515,6 +521,29 @@ public class SmartRaycaster : MonoBehaviour
     }
 
     // ── 交互触发 ──────────────────────────────────────────
+
+    /// <summary>
+    /// Test/automation hook: resolves which part the given ray would interact with.
+    /// Side effects are identical to hovering (a denied part still raises the throttled event).
+    /// </summary>
+    public bool TryGetInteractablePartForTest(Ray ray, out DisassemblyPart part)
+    {
+        RaycastHit hit;
+        return TryGetFirstInteractablePart(ray, out hit, out part);
+    }
+
+    /// <summary>
+    /// Test/automation hook: runs exactly the click path (resolve -> Interact) for the given ray.
+    /// Returns false when the ray resolves to nothing interactable (e.g. a blocked part).
+    /// </summary>
+    public bool TryInteractForTest(Ray ray)
+    {
+        RaycastHit hit;
+        DisassemblyPart part;
+        if (!TryGetFirstInteractablePart(ray, out hit, out part)) return false;
+        TryInteract(ray);
+        return true;
+    }
 
     private void TryInteract(Ray ray)
     {

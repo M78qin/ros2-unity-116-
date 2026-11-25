@@ -12,8 +12,8 @@ namespace DigitalTwin.UI
     public sealed class TwinUITwinOpsView : MonoBehaviour
     {
         [SerializeField] private TwinUIStatusBinder binder;
-        [SerializeField] private float refreshHz = 5f;
-        [SerializeField] private float chartHz = 20f;
+        [SerializeField] private float refreshHz = 10f;  // E5 UI throttle 10–15 Hz
+        [SerializeField] private float chartHz = 12f;    // ChartWrench/ChartTorque redraw
         [SerializeField] private int speedPercent = 10;
 
         private readonly GameObject[] _pages = new GameObject[4];

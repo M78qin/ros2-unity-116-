@@ -50,7 +50,8 @@ namespace DigitalTwin.UI
         public static int Segment => _segment;
 
         /// <summary>显示刷新率（Hz，可调；默认 5，与 TwinUIStatusBinder.refreshHz 初值一致）。</summary>
-        public static float DisplayHz { get; private set; } = 5f;
+        /// <summary>UI display throttle default 10 Hz (E5: keep Canvas 10–15 Hz; CSV/3D stay at record rate).</summary>
+        public static float DisplayHz { get; private set; } = 10f;
 
         /// <summary>曲线时间窗（秒，可调；10 / 20 / 60 三档）。</summary>
         public static float TimeWindowSeconds { get; private set; } = 20f;
@@ -509,10 +510,10 @@ namespace DigitalTwin.UI
 
         // ---------------------------------------------------------------- 显示开关
 
-        /// <summary>设置显示刷新率（Hz）。只改显示节流，不改 CSV 记录频率（记录频率来自文件）。</summary>
+        /// <summary>设置显示刷新率（Hz）。E5：Canvas 10–15 Hz；不改 CSV/3D 记录频率。</summary>
         public static void SetDisplayHz(float hz)
         {
-            float value = Mathf.Clamp(hz, 1f, 30f);
+            float value = Mathf.Clamp(hz, 10f, 15f);
             if (Mathf.Abs(value - DisplayHz) < 0.01f)
             {
                 return;

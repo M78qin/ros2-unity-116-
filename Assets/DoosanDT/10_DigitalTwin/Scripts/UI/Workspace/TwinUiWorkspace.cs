@@ -118,7 +118,7 @@ namespace DigitalTwin.UI
                     Subtitle = "数据链、任务、性能与告警的第一屏摘要；任一卡片都可拆出为浮窗。",
                     StatusText = "只读监测",
                     StatusTone = TwinUITone.Ok,
-                    WidgetIds = new[] { "welcome", "datalink", "performance", "task", "sync", "alarm", "session", "selection", "roam" }
+                    WidgetIds = new[] { "welcome", "datalink", "performance", "task", "sync", "alarm", "session", "selection", "roam", "ik" }
                 },
                 new TwinUiWorkspace
                 {
@@ -151,7 +151,7 @@ namespace DigitalTwin.UI
                     Subtitle = "拆解进度来自既有 DisassemblySystem；步骤引导与训练评估为本地流程/自评，非评分系统。",
                     StatusText = "本地自评",
                     StatusTone = TwinUITone.Unknown,
-                    WidgetIds = new[] { "task", "steps", "eval" }
+                    WidgetIds = new[] { "task", "steps", "eval", "ik" }
                 },
                 new TwinUiWorkspace
                 {

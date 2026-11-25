@@ -30,6 +30,30 @@ namespace DoosanDT.UI.Runtime
 
         private RobotModelController _robot;
         private GameObject _markerRoot;
+
+        /// <summary>左下角原生「场景标定」灰框：默认关闭，功能已并入二期面板卡片。</summary>
+        public static bool ShowPanel = false;
+
+        /// <summary>点位标注（Home / Safty_1 / Screw_10_hover / Contact_1032.5）显隐。</summary>
+        public bool MarkersVisible
+        {
+            get { return _markersVisible; }
+        }
+
+        public void SetMarkersVisible(bool value)
+        {
+            _markersVisible = value;
+            if (_markerRoot != null) _markerRoot.SetActive(value);
+        }
+
+        public void ToggleMarkers() => SetMarkersVisible(!MarkersVisible);
+
+        /// <summary>供二期面板卡片调用：应用 Home_VR_DT 预览姿态（仅本地视觉）。</summary>
+        public void ApplyHomePose()
+        {
+            if (_robot == null) _robot = FindObjectOfType<RobotModelController>();
+            ApplyHomePreview();
+        }
         private bool _markersVisible = true;
         private bool _poseApplied;
         private float _bootAt;
@@ -76,21 +100,41 @@ namespace DoosanDT.UI.Runtime
             }
         }
 
+        private float[] ResolveHomeDeg()
+        {
+            bool usable = HomeDeg != null && HomeDeg.Length > 0;
+            if (usable)
+            {
+                for (int i = 0; i < HomeDeg.Length; i++)
+                    if (Mathf.Abs(HomeDeg[i]) > 0.0001f) { usable = true; break; }
+                    else if (i == HomeDeg.Length - 1) usable = false;
+            }
+            if (usable) return HomeDeg;
+            float[] fallback = _robot != null ? _robot.StartupPoseDeg : null;
+            if (fallback != null && fallback.Length > 0) return fallback;
+            return new float[] { 0f, 0f, 90f, 0f, 0f, 180f };
+        }
+
         private void ApplyHomePreview()
         {
             try
             {
-                _robot.SetRuntimeHome0Degrees(HomeDeg);
+                // 真凶修复：HomeDeg 若未在场景里配置（null/全零），过去会把机械臂按 URDF 零位
+                // 折叠；这里统一回落到 RobotModelController 的 Home_VR_DT = (0,0,90,0,0,180)。
+                float[] pose = ResolveHomeDeg();
+                _robot.SetRuntimeHome0Degrees(pose);
                 bool ok;
                 var previous = _robot.CurrentControlAuthority;
                 // A preview pose is only accepted under CommandPreview authority;
                 // restore the previous authority afterwards so live feedback resumes.
                 _robot.SetControlAuthority(RobotModelController.ControlAuthority.CommandPreview);
-                ok = _robot.ApplyJointDegrees(HomeDeg,
+                ok = _robot.ApplyJointDegrees(pose,
                     RobotModelController.PoseSource.CommandPreview, false);
                 _robot.SetControlAuthority(previous);
                 _hint = ok ? "本地姿态已复位 Home_VR_DT（仅视觉）" : "姿态复位被拒绝（查看控制台）";
-                Debug.Log("[E5Overlay] Home_VR_DT applied=" + ok + " (local preview only)");
+                Debug.Log("[E5Overlay] Home_VR_DT applied=" + ok + " pose=[" +
+                          string.Join(", ", System.Array.ConvertAll(pose, v => v.ToString("0.0"))) +
+                          "] (local preview only)");
             }
             catch (Exception ex)
             {
@@ -131,6 +175,31 @@ namespace DoosanDT.UI.Runtime
                 _markerRoot.transform.SetParent(baseLink, false);
             }
 
+            // Anchor the waypoint set to the CURRENT tool tip: Home_VR_DT is drawn where Spindle_TCP
+            // actually is under the (0,0,90,0,0,180)° startup pose, and every other point keeps its
+            // calibrated offset relative to Home. No absolute ROS-frame coordinate is used, so the
+            // markers can never drift onto the pack surface again.
+            Vector3 homeLocal = Vector3.zero;
+            float[] homeCalib = null;
+            if (baseLink != null)
+            {
+                foreach (var p in file.points)
+                {
+                    if (p != null && p.name == "Home_VR_DT" && p.tcp_mm_deg != null && p.tcp_mm_deg.Length >= 3)
+                    {
+                        homeCalib = p.tcp_mm_deg;
+                        break;
+                    }
+                }
+                Transform tip = FindTip(baseLink);
+                if (tip != null)
+                    homeLocal = baseLink.InverseTransformPoint(tip.position);
+                else
+                    homeLocal = homeCalib != null ? RosMmToUnityLocal(homeCalib) : Vector3.zero;
+                Debug.Log("[E5Overlay] Home anchor = " + homeLocal + " (tip=" +
+                          (tip != null ? tip.name : "fallback calib") + ")");
+            }
+
             int made = 0;
             foreach (var p in file.points)
             {
@@ -145,7 +214,7 @@ namespace DoosanDT.UI.Runtime
                 Color c = p.name == "Home_VR_DT" ? new Color(0.2f, 0.9f, 0.45f)
                         : p.name == "Safty_1" ? new Color(0.25f, 0.65f, 1f)
                         : new Color(1f, 0.55f, 0.15f);
-                MakeMarker(p.name, p.tcp_mm_deg, c);
+                MakeMarker(p.name, p.tcp_mm_deg, c, homeLocal, homeCalib, false);
                 made++;
             }
 
@@ -155,19 +224,71 @@ namespace DoosanDT.UI.Runtime
                 if (p != null && p.name == "Screw_10_hover" && p.tcp_mm_deg != null && p.tcp_mm_deg.Length >= 3)
                 {
                     var contact = new float[] { p.tcp_mm_deg[0], p.tcp_mm_deg[1], 1032.5f };
-                    MakeMarker("Contact_1032.5", contact, new Color(1f, 0.2f, 0.25f));
+                    MakeMarker("Contact_1032.5", contact, new Color(1f, 0.2f, 0.25f), homeLocal, homeCalib, true);
                     made++;
                     break;
                 }
             }
             Debug.Log("[E5Overlay] waypoint markers=" + made + " parent=" +
                       (baseLink != null ? baseLink.name : "world"));
+            // 标定球默认隐藏，只有点击面板「点位标注」按钮时才显示。
+            if (_markerRoot != null) _markerRoot.SetActive(_markersVisible);
         }
 
-        private void MakeMarker(string label, float[] tcpMm, Color color)
+        private static Vector3 RosMmToUnityLocal(float[] tcpMm)
         {
             // ROS base frame (x forward, y left, z up) -> Unity (x, z, -y), metres.
-            var local = new Vector3(tcpMm[0] * 0.001f, tcpMm[2] * 0.001f, -tcpMm[1] * 0.001f);
+            return new Vector3(tcpMm[0] * 0.001f, tcpMm[2] * 0.001f, -tcpMm[1] * 0.001f);
+        }
+
+        /// <summary>Real screw top: centre of the screws group, at its top plane.</summary>
+        private static Transform FindTip(Transform baseLink)
+        {
+            Transform hit = FindByName(baseLink.root, "Spindle_TCP");
+            if (hit != null) return hit;
+            return FindByName(baseLink.root, "Flange_TCP");
+        }
+
+        /// <summary>Real screw top: centre of the screws group, at its top plane.</summary>
+        private static bool TryFindScrewTop(Transform baseLink, out Vector3 world)
+        {
+            world = Vector3.zero;
+            Transform t = baseLink;
+            Transform root = baseLink != null ? baseLink.root : null;
+            Transform screws = FindByName(root, "screws");
+            if (screws == null) return false;
+            Bounds b = new Bounds();
+            bool any = false;
+            foreach (var r in screws.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r == null) continue;
+                if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds);
+            }
+            if (!any) return false;
+            world = new Vector3(b.center.x, b.max.y, b.center.z);
+            return true;
+        }
+
+        private static Transform FindByName(Transform root, string name)
+        {
+            if (root == null) return null;
+            if (root.name == name) return root;
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform hit = FindByName(root.GetChild(i), name);
+                if (hit != null) return hit;
+            }
+            return null;
+        }
+
+        private void MakeMarker(string label, float[] tcpMm, Color color, Vector3 homeLocal, float[] homeCalib, bool staggerRight)
+        {
+            // ROS base frame (x forward, y left, z up) -> Unity (x, z, -y), metres.
+            // Position = Home anchor (current tool tip) + calibrated offset relative to Home.
+            Vector3 rel = homeCalib != null
+                ? RosMmToUnityLocal(tcpMm) - RosMmToUnityLocal(homeCalib)
+                : RosMmToUnityLocal(tcpMm);
+            var local = homeLocal + rel;
             Transform host = _markerRoot.transform;
             var disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             disc.name = "WP_" + label;
@@ -188,12 +309,15 @@ namespace DoosanDT.UI.Runtime
 
             var textGo = new GameObject("LBL_" + label);
             textGo.transform.SetParent(host, false);
-            textGo.transform.localPosition = local + new Vector3(0f, 0.06f, 0f);
+            // Stagger labels of nearly-coincident points so they do not overlap.
+            float side = staggerRight ? 0.14f : -0.14f;
+            textGo.transform.localPosition = local + new Vector3(side, 0.06f, 0f);
             var tm = textGo.AddComponent<TextMesh>();
             tm.text = label;
             tm.characterSize = 0.012f;
             tm.fontSize = 48;
             tm.anchor = TextAnchor.MiddleCenter;
+            tm.alignment = TextAlignment.Center;
             tm.color = color;
         }
 
@@ -232,6 +356,7 @@ namespace DoosanDT.UI.Runtime
 
         private void OnGUI()
         {
+            if (!ShowPanel) return;
             const int w = 216;
             int y = Screen.height - 120 - 16 - 118; // above RenderRatePanel
             var area = new Rect(16, y, w, 118);

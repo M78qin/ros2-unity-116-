@@ -67,8 +67,12 @@ namespace DoosanDT.UI.Runtime
             }
         }
 
+        /// <summary>左下角原生 FPS 灰框：默认关闭，由二期面板按钮接管。</summary>
+        public static bool ShowPanel = false;
+
         private void OnGUI()
         {
+            if (!ShowPanel) return;
             // Shell window occupies (790,65,1114x950); the free corner is the
             // bottom-left stripe (x < 790), so dock there to avoid the KPI bar,
             // the step rail and the live viewport.

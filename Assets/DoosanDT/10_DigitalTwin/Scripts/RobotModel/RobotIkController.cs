@@ -232,6 +232,95 @@ namespace DigitalTwin
             return tcpTransform != null ? tcp.name : $"{tcp.name}（默认末端法兰）";
         }
 
+        /// <summary>当前 TCP 参考节点（空 = 默认 link_6 末端法兰）。</summary>
+        public Transform TcpTransform => tcpTransform;
+
+        // ── 关节限幅（防翻腕）────────────────────────────────────────────
+        [Header("Joint Limit (anti-flip)")]
+        [SerializeField, Tooltip("勾选后，IK 解逐轴夹紧在 q_ref ± jointLimitDeg 内。")]
+        private bool jointLimitEnabled = true;
+
+        [SerializeField, Tooltip("单轴相对 q_ref 的最大变化量（度）。")]
+        private float jointLimitDeg = 10f;
+
+        private float[] _jointRefDeg = System.Array.Empty<float>();
+        private bool _hasJointRef;
+
+        public bool JointLimitEnabled => jointLimitEnabled;
+        public float JointLimitDeg => jointLimitDeg;
+        public bool HasJointReference => _hasJointRef;
+
+        /// <summary>记录当前 6 轴关节角作为 q_ref（开启 IK 拖拽时调用）。</summary>
+        public bool CaptureJointReference()
+        {
+            if (robotModel == null) return false;
+            float[] q = robotModel.ReadCurrentDisplayDegrees();
+            if (q == null || q.Length == 0) return false;
+            _jointRefDeg = new float[q.Length];
+            System.Array.Copy(q, _jointRefDeg, q.Length);
+            _hasJointRef = true;
+            UnityEngine.Debug.Log("[IK-Limit] q_ref captured: " + string.Join(", ",
+                System.Array.ConvertAll(_jointRefDeg, v => v.ToString("0.00"))) +
+                "  limit=±" + jointLimitDeg.ToString("0.#") + "°");
+            return true;
+        }
+
+        /// <summary>复位时切断 IK 残留解：清标志并把内部解同步为当前姿态，避免 LateUpdate 回写。</summary>
+        public void ClearPendingSolution()
+        {
+            var m = RobotModel;
+            if (m != null)
+            {
+                _lastSolutionDeg = m.ReadCurrentDisplayDegrees();
+                CaptureJointReference();
+            }
+        }
+
+        /// <summary>拖拽开关联动：IK 求解器的总开关（拖拽结束即休眠，常态零干扰）。</summary>
+        public void SetSolverActive(bool value)
+        {
+            enableIk = value;
+            enableRuntimeIk = value;
+            previewSolutionOnModel = value;
+        }
+
+        public void SetJointLimitEnabled(bool value)
+        {
+            jointLimitEnabled = value;
+            if (value && !_hasJointRef) CaptureJointReference();
+            UnityEngine.Debug.Log("[IK-Limit] enabled=" + value);
+        }
+
+        public void SetJointLimitDeg(float deg)
+        {
+            jointLimitDeg = Mathf.Max(0.5f, deg);
+        }
+
+        /// <summary>把解逐轴夹紧到 q_ref ± jointLimitDeg；未记录 q_ref 时自动以当前姿态为基准。</summary>
+        private void ClampSolutionToJointReference(float[] solution)
+        {
+            if (!jointLimitEnabled || solution == null || solution.Length == 0) return;
+            if (!_hasJointRef || _jointRefDeg.Length != solution.Length)
+            {
+                if (!CaptureJointReference() || _jointRefDeg.Length != solution.Length) return;
+            }
+            for (int i = 0; i < solution.Length; i++)
+            {
+                float lo = _jointRefDeg[i] - jointLimitDeg;
+                float hi = _jointRefDeg[i] + jointLimitDeg;
+                solution[i] = Mathf.Clamp(solution[i], lo, hi);
+            }
+        }
+
+        /// <summary>
+        /// 供双 TCP 切换（ToolTcpSwitcher）使用：只替换 TCP 参考节点，
+        /// 不改变 IK 求解、不触发任何指令下发。
+        /// </summary>
+        public void SetTcpTransform(Transform tcp)
+        {
+            tcpTransform = tcp;
+        }
+
         public bool TryGetCurrentTcpPose(out Vector3 position, out Quaternion rotation)
         {
             ResolveRobotModel();
@@ -318,6 +407,9 @@ namespace DigitalTwin
 
             float[] seed = robotModel.ReadCurrentDisplayDegrees();
             bool solved = SolveDampedLeastSquares(seed, targetPos, targetRot, out float[] solution, out IkStatus status, out float posErr, out float rotErr, out int iterations);
+
+            // ±jointLimitDeg 限幅（防翻腕）：以“开启拖拽时记录的 q_ref”为基准逐轴夹紧。
+            ClampSolutionToJointReference(solution);
 
             _lastStatus = status;
             _lastPositionError = posErr;

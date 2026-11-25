@@ -240,11 +240,16 @@ public class Outline : MonoBehaviour {
     }
 
     if (skippedUnreadable > 0) {
-      Debug.LogWarning("[Outline] skipped " + skippedUnreadable + " mesh(es) with Read/Write disabled on '"
-                       + name + "'; enable Read/Write in the model import settings to get smooth outlines.",
-                       this);
+      // One-shot per object name — battery pack has dozens of Outline instances; avoid console flood.
+      if (s_loggedUnreadable.Add(name)) {
+        Debug.LogWarning("[Outline] skipped " + skippedUnreadable + " mesh(es) with Read/Write disabled on '"
+                         + name + "' (and similar). Run DigitalTwin/Maintenance/1 Enable ReadWrite for Outline Meshes.",
+                         this);
+      }
     }
   }
+
+  static readonly HashSet<string> s_loggedUnreadable = new HashSet<string>();
 
   List<Vector3> SmoothNormals(Mesh mesh) {
 

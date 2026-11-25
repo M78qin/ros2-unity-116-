@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DigitalTwin;
 using UnityEngine;
 
 namespace DigitalTwin.UI
@@ -6,7 +7,8 @@ namespace DigitalTwin.UI
     /// <summary>
     /// 二期 UI 的只读状态绑定层：以 5 Hz 采样 DigitalTwinRuntime 的公开状态，
     /// 汇总成视图模型（含告警），供顶栏与两个主面板读取。
-    /// 约束：只读——不新增总线字段、不改 Ros2Bridge / TwinRecorder / 数据链。
+    /// 约束：只读——不新增总线字段、不改 TwinRecorder / 数据链写入；
+    /// E5 仅叠读 Ros2Bridge.LastGateStatus → 既有 Mode/告警/Chart 槽。
     /// </summary>
     public sealed class TwinUIStatusBinder : MonoBehaviour
     {
@@ -100,7 +102,7 @@ namespace DigitalTwin.UI
         [SerializeField] private DigitalTwinRuntime runtime;
         [SerializeField] private TwinCommandController controller;
         [SerializeField] private TwinRecorder recorder;
-        [SerializeField] private float refreshHz = 5f;
+        [SerializeField] private float refreshHz = 10f;  // E5: Canvas/KPI 10–15 Hz (CSV stays record-rate)
 
         private readonly List<Alarm> _alarms = new List<Alarm>(8);
         private Snapshot _snapshot;
@@ -315,6 +317,9 @@ namespace DigitalTwin.UI
                 s.LastStatus = "未找到控制组件";
             }
 
+            // E5：把 /dt/status/gate_trace 闸门状态叠到既有 Mode/Status/告警槽（不新建 Canvas）。
+            ApplyGateOverlay(ref s);
+
             var rec = recorder;
             if (rec == null)
             {
@@ -504,8 +509,66 @@ namespace DigitalTwin.UI
             }
         }
 
+        private void ApplyGateOverlay(ref Snapshot s)
+        {
+            Ros2Bridge bridge = null;
+            if (runtime != null)
+            {
+                bridge = runtime.Ros2Bridge;
+            }
+
+            if (bridge == null)
+            {
+                bridge = FindObjectOfType<Ros2Bridge>();
+            }
+
+            if (bridge == null)
+            {
+                return;
+            }
+
+            string gate = bridge.LastGateStatus;
+            if (string.IsNullOrWhiteSpace(gate))
+            {
+                return;
+            }
+
+            // Mode KPI 子卡牌：显示闸门态；工艺状态用 StatusText。
+            s.Mode = gate;
+            s.StatusText = gate;
+            s.StatusProvided = true;
+            bool pause = gate == "TORQUE_LIMIT_PAUSE" || gate == "SAFE_Z_REJECT" || gate == "HALT";
+            s.StatusNormal = !pause &&
+                             gate != "REJECTED" &&
+                             !gate.StartsWith("REJECTED", System.StringComparison.Ordinal);
+            if (pause || !s.StatusNormal)
+            {
+                string reason = bridge.LastGateReason;
+                s.MotionError = string.IsNullOrEmpty(reason) ? gate : gate + " | " + reason;
+            }
+
+            // 若帧里力矩/力为空，用 bridge 缓存补齐，供 ChartTorque / ChartWrench 刷新。
+            if ((s.Force == null || s.Force.Length < 6) && bridge.LatestForceVector != null && bridge.LatestForceVector.Length >= 6)
+            {
+                s.Force = bridge.LatestForceVector;
+            }
+        }
+
         private void BuildAlarms(ref Snapshot s)
         {
+            // 闸门高亮：优先 Crit，落在既有告警列表槽位（TwinUITwinOpsView alarm texts）。
+            if (s.StatusProvided && !string.IsNullOrEmpty(s.StatusText))
+            {
+                if (s.StatusText == "TORQUE_LIMIT_PAUSE")
+                {
+                    _alarms.Add(new Alarm { Text = "力/力矩超限软停 " + (s.MotionError ?? ""), Level = Severity.Crit });
+                }
+                else if (s.StatusText == "SAFE_Z_REJECT")
+                {
+                    _alarms.Add(new Alarm { Text = "SAFE-Z 拦截 Z<1030 " + (s.MotionError ?? ""), Level = Severity.Crit });
+                }
+            }
+
             if (!s.Connected)
             {
                 _alarms.Add(new Alarm { Text = "数据源未连接", Level = Severity.Crit });

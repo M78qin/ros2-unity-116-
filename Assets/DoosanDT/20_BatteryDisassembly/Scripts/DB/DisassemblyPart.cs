@@ -214,7 +214,11 @@ public class DisassemblyPart : MonoBehaviour
 
         if (DisassemblySystem.Instance != null &&
             !DisassemblySystem.Instance.CheckInteractability(this))
+        {
+            // Step-2 permission interlock fallback: covers non-raycast callers (debug menus, scripts).
+            DisassemblyPermissionEvents.NotifyDenied(this, "not-interactable", "interact");
             return;
+        }
 
         Transform syncRoot = ResolveSyncRoot();
         bool useSyncGroup = (syncRoot != null && syncRoot.GetComponentsInChildren<DisassemblyPart>(true).Length > 1);

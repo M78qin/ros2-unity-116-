@@ -203,6 +203,107 @@ namespace DigitalTwin.Interaction
         public bool HudCreated => _hudCreated;
         public GameObject HudCanvasRoot => _hudCanvasRoot;
 
+        /// <summary>
+        /// 双 TCP 切换（ToolTcpSwitcher）后重新捕获当前 TCP：ghost 手柄、初始位姿与工作空间
+        /// 随之更新。只做本地预览，不调用任何 EnterPlan/EnterExecute，也不下发指令。
+        /// </summary>
+        public void RecaptureTcp()
+        {
+            if (ikController == null) return;
+            if (!ikController.TryGetCurrentTcpPose(out Vector3 pos, out Quaternion rot)) return;
+            if (!IsFinite(pos)) return;
+
+            _targetPosition = pos;
+            _targetRotation = rot;
+            _initialTcpPosition = pos;
+            _initialTcpRotation = rot;
+            _workspaceCenter = pos;
+            ikController.SetTargetPose(pos, rot);
+            ikController.ResetTargetToTcp();
+            _hasPendingTarget = false;
+            EnsureVisuals();
+            EnsureHud();
+            Debug.Log("[PLAY-IK] recaptured TCP after switch: " + FormatVector(pos));
+        }
+
+        /// <summary>
+        /// 运行时开关拖拽球。默认关闭（进 Play 不自动激活，防误触）。
+        /// 关闭时隐藏球体并中止拖拽，不改变已求解的姿态。
+        /// </summary>
+        /// <summary>联动 IK 求解开关：开启拖拽才允许求解，关闭/复位立即休眠（不影响 Transform 姿态驱动）。</summary>
+        private void SetDriveSuppressed(bool value)
+        {
+            if (ikController == null) ikController = FindObjectOfType<RobotIkController>();
+            var m = ikController != null ? ikController.RobotModel : null;
+            if (m != null) m.SetTransformDriveSuppressed(value);
+        }
+
+        private void SetIkSolverActive(bool value)
+        {
+            if (ikController == null) ikController = UnityEngine.Object.FindObjectOfType<RobotIkController>();
+            if (ikController != null) ikController.SetSolverActive(value);
+        }
+
+        public void SetIkDragEnabled(bool value)
+        {
+            enableHandle = value;
+            if (!value)
+            {
+                _dragging = false;
+                _hasPendingTarget = false;
+                if (_sphereGo != null) _sphereGo.SetActive(false);
+                if (_handleRoot != null) _handleRoot.gameObject.SetActive(false);
+                // 关闭拖拽 = IK 彻底休眠，常态（真机/回放）零干扰。
+                SetIkSolverActive(false);
+                SetDriveSuppressed(false);
+            }
+            else
+            {
+                if (_handleRoot != null) _handleRoot.gameObject.SetActive(true);
+                if (_sphereGo != null) _sphereGo.SetActive(true);
+                // 以“此刻的姿态”作为 ±10° 限幅基准，避免开启瞬间就被大角度解带飞。
+                if (ikController != null) ikController.CaptureJointReference();
+                RecaptureTcp();
+                SetIkSolverActive(true);
+                SetDriveSuppressed(true);
+            }
+            Debug.Log("[PLAY-IK] drag enabled=" + value);
+        }
+
+        public void ToggleIkDrag() => SetIkDragEnabled(!enableHandle);
+
+        /// <summary>一键回到安全姿态：零位 + 清空拖拽目标（仅本地预览，不下发）。</summary>
+        public void RestoreSafePose()
+        {
+            _dragging = false;
+            _hasPendingTarget = false;
+            if (_sphereGo != null) _sphereGo.SetActive(false);
+            // 复位即让 IK 休眠，避免残留解继续驱动模型。
+            SetIkSolverActive(false);
+            if (ikController != null) ikController.ClearPendingSolution();
+            SetDriveSuppressed(false);
+            RobotModelController model = ikController != null ? ikController.RobotModel : null;
+            if (model != null)
+            {
+                // 复位到 Home_VR_DT(0,0,90,0,0,180)，不是全零位（零位会折叠“打死结”）。
+                model.ApplyStartupPose(false, true);
+                // 双保险：清 IK 残留 + 锁定 Home_VR_DT 0.8s
+                if (ikController != null) ikController.ClearPendingSolution();
+                model.LockPose(new float[] { 0f, 0f, 90f, 0f, 0f, 180f }, 0.8f);
+                Debug.Log("[PLAY-IK] safe pose restored (Home_VR_DT, locked 0.8s)");
+            }
+            else
+            {
+                Debug.LogWarning("[PLAY-IK] safe pose skipped: robot model missing");
+            }
+            if (ikController != null)
+            {
+                ikController.CaptureJointReference();
+                ikController.ResetTargetToTcp();
+            }
+            RecaptureTcp();
+        }
+
         /// <summary>P9：关闭/开启 IK 手柄 HUD（V2 把它集成进"IK 预览"卡片，故默认关闭）。</summary>
         public void SetHudEnabled(bool value)
         {
@@ -1421,18 +1522,17 @@ namespace DigitalTwin.Interaction
 
             Ray ray = playCamera.ScreenPointToRay(screenPoint);
             RaycastHit[] hits = Physics.RaycastAll(ray, 500f, handleHitLayers.value, QueryTriggerInteraction.Collide);
+            // 必须“明确命中”手柄：最近的实体命中必须属于手柄根节点，隔墙/隔物点不到。
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
             for (int i = 0; i < hits.Length; i++)
             {
                 Collider collider = hits[i].collider;
-                if (collider == null)
+                if (collider == null || collider.isTrigger)
                 {
                     continue;
                 }
 
-                if (collider.transform == _handleRoot || collider.transform.IsChildOf(_handleRoot))
-                {
-                    return true;
-                }
+                return collider.transform == _handleRoot || collider.transform.IsChildOf(_handleRoot);
             }
 
             return false;

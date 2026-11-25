@@ -41,7 +41,7 @@ namespace DigitalTwin.UI
         // 两行：① 实时/回放/换回放 + 当前源身份；② 记录频率(CSV 只读) / 显示刷新率(可调) / 时间窗(10/20/60 s)。
         // 只调用 TwinUiSourceSwitch（只读回放 + 显示开关），不碰任何数据链写入。
         public const float SourceBarHeight = 46f;
-        public static readonly float[] HzOptions = { 5f, 10f, 20f };
+        public static readonly float[] HzOptions = { 10f, 12f, 15f };  // E5 UI display band
         public static readonly float[] WindowOptions = { 10f, 20f, 60f };
 
         /// <summary>fix1 B(2)：详情浮层高度（展开时压在首卡上方，不改变页面高度、不触发重排版）。</summary>

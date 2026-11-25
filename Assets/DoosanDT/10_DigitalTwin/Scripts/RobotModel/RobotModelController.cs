@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -23,8 +23,11 @@ namespace DigitalTwin
             [Tooltip("进入 Play 时应用机械 Zero 姿态，即全部关节绝对角为 0。")]
             ApplyZeroPose = 1,
             [Tooltip("进入 Play 时应用 Home0 姿态。推荐用于让虚拟机械臂先对齐真实机械臂当前姿态。")]
-            ApplyHome0Pose = 2
+            ApplyHome0Pose = 2,
+            [Tooltip("进入 Play 时应用 startupPoseDeg（默认 Home_VR_DT = 0,0,90,0,0,180）。")]
+            ApplyCustomPose = 3
         }
+
 
         public enum ControlAuthority
         {
@@ -81,6 +84,12 @@ namespace DigitalTwin
 
             [Tooltip("关节最大显示角，单位 degree。这里的角度是相对于 Zero 的绝对角，支持小数。")]
             public float maxDeg = 360f;
+
+            [Tooltip("标准姿态下的静止局部旋转（由 Step14/1 Capture Rest Pose 在 Edit 模式捕获）。Edit 预览与 Play 共用，避免两模式基准不一致。")]
+            public Quaternion restLocalRotation = Quaternion.identity;
+
+            [Tooltip("是否已捕获 restLocalRotation。")]
+            public bool hasRestLocalRotation;
 
             [Tooltip("是否已经捕获该关节的 Zero localRotation。Zero 是机械 0 点基准，不会被 Home、Target、IK 或 Runtime 数据自动修改。")]
             public bool hasZeroLocalRotation;
@@ -290,9 +299,63 @@ namespace DigitalTwin
         /// </summary>
         private void LateUpdate()
         {
+            if (Application.isPlaying && useTransformDriveInPlay)
+            {
+                // Transform 驱动：每帧用与 Edit 预览完全相同的公式重写 link 旋转，
+                // 物理被禁用后这里就是唯一权威，姿态不可能被求解器拉走。
+                ApplyTransformDriveFrame();
+            }
             if (enablePerFrameVisualStep)
             {
                 TickLiveVisual(Time.unscaledDeltaTime);
+            }
+        }
+
+        private float[] _lockPoseDeg; private float _lockUntil = -1f;
+        /// <summary>复位保护窗：锁定期内拒绝 IK 预览写入，保证 dotDown 稳定回 1.0。</summary>
+        public void LockPose(float[] targetDeg, float durationSec = 0.8f)
+        {
+            if (targetDeg == null || targetDeg.Length == 0) return;
+            // 绕过来源门禁：临时切到 CommandPreview 再写，避免被 CanAcceptPoseSource 拒绝。
+            var prev = CurrentControlAuthority;
+            SetControlAuthority(ControlAuthority.CommandPreview);
+            _lockPoseDeg = (float[])targetDeg.Clone();
+            _lockUntil = Time.realtimeSinceStartup + Mathf.Max(0.1f, durationSec);
+            ApplyJointDisplayDegrees(_lockPoseDeg, false, PoseSource.CommandPreview, true, true);
+            SetControlAuthority(prev);
+            UnityEngine.Debug.Log("[Lock] home pose locked");
+        }
+        public bool PoseLocked => Application.isPlaying && Time.realtimeSinceStartup < _lockUntil;
+
+        private bool _transformDriveSuppressed;
+        /// <summary>IK 求解生效期间临时挂起逐帧姿态覆写，否则会把 IK 解盖掉。</summary>
+        public void SetTransformDriveSuppressed(bool value) => _transformDriveSuppressed = value;
+        public bool TransformDriveSuppressed => _transformDriveSuppressed;
+
+        /// <summary>Play 模式下逐帧复现 Edit 的 Transform 姿态（不触碰物理）。</summary>
+        private void ApplyTransformDriveFrame()
+        {
+            if (_transformDriveSuppressed && !PoseLocked) return;   // IK 拖拽期间让解算结果落地
+            if (PoseLocked && _lockPoseDeg != null && joints != null)
+            {
+                for (int i = 0; i < Mathf.Min(joints.Length, _lockPoseDeg.Length); i++)
+                {
+                    var lb = joints[i];
+                    if (lb == null || lb.body == null) continue;
+                    ApplyTransformPose(lb, ConvertDisplayDegToUnityDeg(i, _lockPoseDeg[i]));
+                    if (_lastTargetDisplayDegCache != null && i < _lastTargetDisplayDegCache.Length)
+                        _lastTargetDisplayDegCache[i] = _lockPoseDeg[i];
+                }
+                return;
+            }
+            if (joints == null || _lastTargetDisplayDegCache == null) return;
+            int count = Mathf.Min(joints.Length, _lastTargetDisplayDegCache.Length);
+            for (int i = 0; i < count; i++)
+            {
+                JointBinding b = joints[i];
+                if (b == null || b.body == null) continue;
+                float unityDeg = ConvertDisplayDegToUnityDeg(i, _lastTargetDisplayDegCache[i]);
+                ApplyTransformPose(b, unityDeg);
             }
         }
 
@@ -319,6 +382,9 @@ namespace DigitalTwin
                 case StartupPoseMode.ApplyHome0Pose:
                     ApplyHome0Pose(false, PoseSource.Startup, true);
                     break;
+                case StartupPoseMode.ApplyCustomPose:
+                    ApplyStartupPose(false, true);
+                    break;
                 case StartupPoseMode.KeepCurrentEditorPose:
                     UpdateCurrentDisplayCacheFromModel();
                     CopyCurrentToTargetCache();
@@ -331,10 +397,91 @@ namespace DigitalTwin
                 ClearArticulationVelocities();
             }
 
+            // 启动保护窗口：此后 startupPoseHoldSeconds 秒内忽略 RuntimeLive/Runtime 的零位推流。
+            _startupHoldUntil = Time.realtimeSinceStartup + Mathf.Max(0f, startupPoseHoldSeconds);
+
             _startupPoseAppliedThisPlay = true;
+
+            float[] applied = ReadCurrentDisplayDegrees();
+            UnityEngine.Debug.Log("[Startup] mode=" + startupPoseMode + " applied=[" +
+                string.Join(", ", System.Array.ConvertAll(applied, v => v.ToString("0.00"))) +
+                "] holdUntil=+" + startupPoseHoldSeconds + "s");
         }
 
         public void SetStartupPoseMode(StartupPoseMode mode) => startupPoseMode = mode;
+
+        // ── 姿态写入追踪（Play 现场诊断用，零开销之外只拼一个字符串）────────────────
+        public static long PoseApplyCount;
+        public static string LastPoseTrace = "";
+        public static event System.Action<string> PoseTraced;
+
+        private static string FirstExternalCaller(int skip)
+        {
+            try
+            {
+                var st = new System.Diagnostics.StackTrace(1, false);
+                for (int i = 0; i < st.FrameCount; i++)
+                {
+                    var m = st.GetFrame(i).GetMethod();
+                    if (m == null) continue;
+                    var t = m.DeclaringType;
+                    if (t == null) continue;
+                    if (t.Name == "RobotModelController") continue;
+                    return t.Name + "." + m.Name;
+                }
+            }
+            catch { }
+            return "?";
+        }
+
+        private void TracePoseApply(PoseSource source, float[] deg)
+        {
+            PoseApplyCount++;
+            string caller = FirstExternalCaller(1);
+            string vals = deg == null ? "null" : string.Join(",",
+                System.Array.ConvertAll(deg, v => v.ToString("0.0")));
+            LastPoseTrace = "src=" + source + " caller=" + caller + " deg=[" + vals + "]";
+            var h = PoseTraced;
+            if (h != null)
+            {
+                try { h(LastPoseTrace); } catch { }
+            }
+        }
+
+        // ── 启动/复位姿态：Home_VR_DT = (0, 0, 90, 0, 0, 180)° ──────────────────────
+        [Header("Startup Pose (Home_VR_DT)")]
+        [SerializeField, Tooltip("进入 Play 及 RestoreSafePose 使用的显示角（度），默认 0,0,90,0,0,180。")]
+        private float[] startupPoseDeg = { 0f, 0f, 90f, 0f, 0f, 180f };
+
+        [SerializeField, Tooltip("启动姿态保护窗口（秒）：窗口内忽略 RuntimeLive/Runtime 的零位推流，防止一进 Play 就被折到 URDF 零位。")]
+        private float startupPoseHoldSeconds = 0.8f;
+
+        [SerializeField, Tooltip("Play 模式直接用 Transform 驱动姿态（与 Edit 预览同一数学），不再交给 PhysX articulation，避免两套轴系不一致。")]
+        private bool useTransformDriveInPlay = true;
+
+        private float _startupHoldUntil = -1f;
+
+        /// <summary>启动/安全复位姿态（显示角，度）。</summary>
+        public float[] StartupPoseDeg => startupPoseDeg;
+
+        public void SetStartupPoseDeg(float[] deg)
+        {
+            if (deg == null || deg.Length == 0) return;
+            startupPoseDeg = new float[deg.Length];
+            System.Array.Copy(deg, startupPoseDeg, deg.Length);
+        }
+
+        /// <summary>应用 Home_VR_DT 安全姿态（本地预览；不下发、不改变 Zero 基准）。</summary>
+        public void ApplyStartupPose(bool editModePreview, bool immediateState)
+        {
+            EnsureRuntimeArrays();
+            float[] pose = startupPoseDeg != null && startupPoseDeg.Length > 0
+                ? startupPoseDeg
+                : new float[] { 0f, 0f, 90f, 0f, 0f, 180f };
+            ApplyJointDisplayDegrees(pose, editModePreview, PoseSource.Home, true, immediateState);
+        }
+
+        public void ApplyStartupPose() => ApplyStartupPose(!Application.isPlaying, true);
 
         public void SetControlAuthority(ControlAuthority authority)
         {
@@ -728,7 +875,20 @@ namespace DigitalTwin
             EnsureJointArray();
             EnsureRuntimeArrays();
 
+            TracePoseApply(source, displayDeg);
+
             if (!CanAcceptPoseSource(source))
+            {
+                return false;
+            }
+
+            if (Application.isPlaying && source == PoseSource.IkPreview && PoseLocked) return false;
+
+            // 启动保护窗口：一进 Play 时数字孪生运行时可能先推一帧 URDF 零位（折叠态），
+            // 会把刚应用的 Home_VR_DT 立刻冲掉。窗口内忽略这类推流，等真实 ROS 数据到达再接管。
+            if (Application.isPlaying && _startupHoldUntil > 0f &&
+                Time.realtimeSinceStartup < _startupHoldUntil &&
+                (source == PoseSource.RuntimeLive || source == PoseSource.Runtime))
             {
                 return false;
             }
@@ -746,7 +906,16 @@ namespace DigitalTwin
 
                 float clampedDisplayDeg = ClampDisplayDeg(i, displayDeg[i]);
                 float unityDeg = ConvertDisplayDegToUnityDeg(i, clampedDisplayDeg);
-                ApplyUnityDegToBody(binding, unityDeg, editModePreview, immediateState);
+                if (Application.isPlaying && useTransformDriveInPlay)
+                {
+                    // Play 与 Edit 同一条管线：直接写 Transform，保证 (0,0,90,0,0,180) 的空间姿态
+                    // 与 Edit 模式下完全一致（物理 articulation 的 joint anchor 与预览轴不一致）。
+                    ApplyTransformPose(binding, unityDeg);
+                }
+                else
+                {
+                    ApplyUnityDegToBody(binding, unityDeg, editModePreview, immediateState);
+                }
                 _currentDisplayDegCache[i] = clampedDisplayDeg;
                 _lastTargetDisplayDegCache[i] = clampedDisplayDeg;
                 applied = true;
@@ -1065,7 +1234,13 @@ namespace DigitalTwin
 
             if (immediateState && body.dofCount > 0)
             {
-                try { body.jointPosition = new ArticulationReducedSpace(unityDeg * Mathf.Deg2Rad); }
+                // 第 0 帧瞬时就位：同时写 jointPosition 与 jointVelocity，
+                // 避免物理从 0° 甩向 90°/180° 的过渡（启动时“阻尼爬行/下坠”的直接原因）。
+                try
+                {
+                    body.jointPosition = new ArticulationReducedSpace(unityDeg * Mathf.Deg2Rad);
+                    body.jointVelocity = new ArticulationReducedSpace(0f);
+                }
                 catch { }
             }
 
@@ -1081,19 +1256,40 @@ namespace DigitalTwin
         private void ApplyEditorTransformPreview(JointBinding binding, float unityDeg)
         {
             if (binding == null || binding.body == null) return;
+            ApplyTransformPose(binding, unityDeg);
+            EditorUtility.SetDirty(binding.body.transform);
+            EditorUtility.SetDirty(binding.body);
+        }
+#endif
+
+        /// <summary>
+        /// 唯一姿态合成数学（Edit 预览与 Play 共用）：
+        ///   localRotation = rest * AngleAxis(unityDeg, anchorRotation * right)
+        /// 基准优先取序列化的 restLocalRotation（由 Step14/1 在标准姿态下捕获），
+        /// 没有时才退回懒捕获的 zeroLocalRotation。
+        /// </summary>
+        private void ApplyTransformPose(JointBinding binding, float unityDeg)
+        {
+            if (binding == null || binding.body == null) return;
+            if (binding.hasRestLocalRotation)
+            {
+                binding.zeroLocalRotation = binding.restLocalRotation;
+                binding.hasZeroLocalRotation = true;
+            }
+            // 没有 rest 基准时不做懒捕获（那会让同一场景两次 Play 得到不同结果），
+            // 直接用当前旋转并降级为一个稳定基准。
             if (!binding.hasZeroLocalRotation)
             {
                 binding.zeroLocalRotation = binding.body.transform.localRotation;
                 binding.hasZeroLocalRotation = true;
+                UnityEngine.Debug.LogWarning("[RobotModel] joint " + binding.name +
+                    " 缺少 restLocalRotation，已用当前旋转作为基准（建议运行 Step16/1 重新标定）");
             }
             Vector3 axis = binding.body.anchorRotation * Vector3.right;
             if (axis.sqrMagnitude < 1e-8f) axis = Vector3.right;
             axis.Normalize();
             binding.body.transform.localRotation = binding.zeroLocalRotation * Quaternion.AngleAxis(unityDeg, axis);
-            EditorUtility.SetDirty(binding.body.transform);
-            EditorUtility.SetDirty(binding.body);
         }
-#endif
 
         private void UpdateCurrentDisplayCacheFromModel()
         {
