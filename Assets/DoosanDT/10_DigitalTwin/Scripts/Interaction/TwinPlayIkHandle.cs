@@ -1072,6 +1072,11 @@ namespace DigitalTwin.Interaction
                 _reachable = false;
             }
 
+            // 第 4 章工艺/工具门禁：每次 ghost 目标变化都做一次只读评估（不发布、不改模型）。
+            // 命中非法工艺步骤或工具不匹配时 LastResult.Allowed=false，卡片显示红字原因；
+            // 命中螺钉区则绑定预标定点位（Screw_10 / E5_SCREW_DISASSEMBLY）供 Ghost 预览与派发使用。
+            EvaluateProcessGate();
+
             if (!_reachable)
             {
                 _unreachableEvents++;
@@ -1469,6 +1474,40 @@ namespace DigitalTwin.Interaction
             line.endColor = color;
             line.enabled = true;
             return line;
+        }
+
+        // ---- 第 4 章工艺/工具门禁（只读镜像，供卡片显示；判定在 ProcessStepGate）----
+        /// <summary>最近一次工艺门禁是否放行。</summary>
+        public bool ProcessGateAllowed => ProcessStepGate.LastResult.Allowed;
+        public string ProcessGateReasonCode => ProcessStepGate.LastResult.ReasonCode;
+        public string ProcessGateMessage => ProcessStepGate.LastResult.Message;
+        public string ProcessGateWaypoint => ProcessStepGate.LastResult.MatchedWaypointName;
+        public string ProcessGateProgramId => ProcessStepGate.LastResult.MatchedProgramId;
+
+        private string _lastGateSignature = string.Empty;
+
+        /// <summary>ghost 目标变化时评估一次工艺门禁（只读：不发布、不改模型、不写 DB 状态）。</summary>
+        private void EvaluateProcessGate()
+        {
+            ProcessGateResult gate;
+            ProcessStepGate.EvaluateTarget(_targetPosition, ProcessStepGate.DefaultChannel, out gate);
+
+            string signature = (gate.Allowed ? "ALLOW" : "BLOCK") + "|" + gate.ReasonCode + "|" +
+                               gate.TargetPartName + "|" + gate.MatchedWaypointName;
+            if (signature == _lastGateSignature)
+            {
+                return;
+            }
+
+            _lastGateSignature = signature;
+            if (gate.Allowed)
+            {
+                Debug.Log(LogTag + " process gate " + gate.ToLine());
+            }
+            else
+            {
+                Debug.LogWarning(LogTag + " process gate " + gate.ToLine());
+            }
         }
 
         private void UpdateVisuals()

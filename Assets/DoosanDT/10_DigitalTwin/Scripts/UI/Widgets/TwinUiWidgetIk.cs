@@ -27,6 +27,7 @@ namespace DigitalTwin.UI
         private TwinUiCardParts.Kv _posErr;
         private TwinUiCardParts.Kv _rotErr;
         private TwinUiCardParts.Kv _iterations;
+        private TwinUiCardParts.Kv _gate;
         private TMP_Text _note;
 
         private TwinUIButton _btnDrag, _btnLimit, _btnTcp, _btnAxes, _btnRestore, _btnMarkers;
@@ -36,10 +37,10 @@ namespace DigitalTwin.UI
         public override string Id => ModuleId;
         public override string Title => "末端 IK 微调";
         public override string Kicker => "IK CONTROL";
-        public override string Subtitle => "TwinPlayIkHandle / ±10°";
+        public override string Subtitle => "TwinPlayIkHandle / ±30° 每轴";
         public override string WorkspaceId => TwinUiWorkspaceRegistry.Twin;
-        public override Vector2 CardSize => new Vector2(340f, 486f);
-        public override Vector2 FloatingMinSize => new Vector2(310f, 420f);
+        public override Vector2 CardSize => new Vector2(340f, 510f);
+        public override Vector2 FloatingMinSize => new Vector2(310f, 444f);
 
         public override RectTransform Build(Transform parent, bool floating)
         {
@@ -55,28 +56,29 @@ namespace DigitalTwin.UI
             _posErr = TwinUiCardParts.Row(root, 120f, "位置误差", w);
             _rotErr = TwinUiCardParts.Row(root, 144f, "旋转误差", w);
             _iterations = TwinUiCardParts.Row(root, 168f, "迭代次数", w);
+            _gate = TwinUiCardParts.Row(root, 192f, "工艺门禁", w);
             _note = TwinUiCardParts.Caption(root,
-                "仅预览（Ghost）；真机下发锁定，执行需独立授权与安全评审", 0f, 194f, w, 30f);
+                "仅预览（Ghost）；真机下发锁定，执行需独立授权与安全评审", 0f, 218f, w, 30f);
 
             // ── 操作区：2 列 × 3 行原生按钮网格 ────────────────────────────
-            TwinUiCardParts.Section(root, "操作", 232f, w);
-            TwinUiCardParts.Divider(root, 248f, w);
+            TwinUiCardParts.Section(root, "操作", 256f, w);
+            TwinUiCardParts.Divider(root, 272f, w);
 
             const float colW = 148f;
             const float rowH = 26f;
             float x0 = 0f, x1 = colW + 10f;
             _btnDrag = TwinUIStyle.Button(root, "BtnIkDrag", "IK 拖拽: OFF", TwinUIButton.Kind.Plain,
-                new Vector2(x0, -262f), new Vector2(colW, rowH), OnToggleDrag);
-            _btnLimit = TwinUIStyle.Button(root, "BtnJointLimit", "限幅 ±10°: ON", TwinUIButton.Kind.Plain,
-                new Vector2(x1, -262f), new Vector2(colW, rowH), OnToggleLimit);
+                new Vector2(x0, -286f), new Vector2(colW, rowH), OnToggleDrag);
+            _btnLimit = TwinUIStyle.Button(root, "BtnJointLimit", "限幅 ±30°: ON", TwinUIButton.Kind.Plain,
+                new Vector2(x1, -286f), new Vector2(colW, rowH), OnToggleLimit);
             _btnTcp = TwinUIStyle.Button(root, "BtnTcp", "TCP: S", TwinUIButton.Kind.Plain,
-                new Vector2(x0, -294f), new Vector2(colW, rowH), OnToggleTcp);
+                new Vector2(x0, -318f), new Vector2(colW, rowH), OnToggleTcp);
             _btnAxes = TwinUIStyle.Button(root, "BtnTcpAxes", "坐标轴: OFF", TwinUIButton.Kind.Plain,
-                new Vector2(x1, -294f), new Vector2(colW, rowH), OnToggleAxes);
+                new Vector2(x1, -318f), new Vector2(colW, rowH), OnToggleAxes);
             _btnRestore = TwinUIStyle.Button(root, "BtnRestorePose", "姿态复位", TwinUIButton.Kind.Default,
-                new Vector2(x0, -326f), new Vector2(colW, rowH), OnRestorePose);
+                new Vector2(x0, -350f), new Vector2(colW, rowH), OnRestorePose);
             _btnMarkers = TwinUIStyle.Button(root, "BtnMarkers", "点位标注: OFF", TwinUIButton.Kind.Plain,
-                new Vector2(x1, -326f), new Vector2(colW, rowH), OnToggleMarkers);
+                new Vector2(x1, -350f), new Vector2(colW, rowH), OnToggleMarkers);
 
             if (_btnDrag != null) _btnDrag.Label.fontSize = TwinUIStyle.FontUnit;
             if (_btnLimit != null) _btnLimit.Label.fontSize = TwinUIStyle.FontUnit;
@@ -124,7 +126,7 @@ namespace DigitalTwin.UI
             if (_ik != null)
             {
                 _ik.SetJointLimitEnabled(_limitOn);
-                _ik.SetJointLimitDeg(10f);
+                _ik.SetJointLimitDeg(30f);
             }
             Refresh();
         }
@@ -187,6 +189,7 @@ namespace DigitalTwin.UI
                 _posErr.Set(TwinUITextR3.Placeholder, TwinUITone.Unknown);
                 _rotErr.Set(TwinUITextR3.Placeholder, TwinUITone.Unknown);
                 _iterations.Set(TwinUITextR3.Placeholder, TwinUITone.Unknown);
+                UpdateGateRow();
                 UpdateButtonLabels();
                 return;
             }
@@ -201,16 +204,51 @@ namespace DigitalTwin.UI
             _status.Set(string.IsNullOrEmpty(_handle.IkStatusText) ? TwinUITextR3.Placeholder : _handle.IkStatusText,
                 tone);
             _reachable.Set(reachable ? "可达" : "不可达", reachable ? TwinUITone.Ok : TwinUITone.Crit);
-            _limits.Set(limitsOk ? "在限位内" : "超限位", limitsOk ? TwinUITone.Ok : TwinUITone.Crit);
+            if (_handle.LimitStop)
+                _limits.Set("顶到 ±30°/轴", TwinUITone.Warn);
+            else
+                _limits.Set(limitsOk ? "在限位内" : "超限位", limitsOk ? TwinUITone.Ok : TwinUITone.Crit);
             _workspace.Set(clamped ? "已钳制" : "在范围内", clamped ? TwinUITone.Warn : TwinUITone.Ok);
             _posErr.Set((_handle.PositionErrorMeters * 1000f).ToString("F1") + " mm",
                 _handle.PositionErrorMeters > 0.02f ? TwinUITone.Warn : TwinUITone.Ok);
             _rotErr.Set(_handle.RotationErrorDeg.ToString("F2") + " °",
                 _handle.RotationErrorDeg > 5f ? TwinUITone.Warn : TwinUITone.Ok);
             _iterations.Set(_handle.Iterations.ToString(), TwinUITone.Ok);
+            UpdateGateRow();
             _note.color = _handle.AllowRobotDispatch ? TwinUITheme.ToneTextColor(TwinUITone.Crit) : TwinUIStyle.QuietColor;
 
             UpdateButtonLabels();
+        }
+
+        /// <summary>第 4 章工艺/工具门禁只读行：放行显示绑定点位，拒绝显示中文原因（短标签，避免窄栏溢出）。</summary>
+        private void UpdateGateRow()
+        {
+            if (_gate.Value == null) return;
+
+            if (!ProcessStepGate.HasResult)
+            {
+                _gate.Set("未评估", TwinUITone.Unknown);
+                return;
+            }
+
+            ProcessGateResult r = ProcessStepGate.LastResult;
+            if (r.Allowed)
+            {
+                if (r.ReasonCode == ProcessStepGate.ReasonOk && !string.IsNullOrEmpty(r.MatchedWaypointName))
+                    _gate.Set("放行 · " + r.MatchedWaypointName, TwinUITone.Ok);
+                else if (r.ReasonCode == ProcessStepGate.ReasonFreeSpace)
+                    _gate.Set("安全空域", TwinUITone.Ok);
+                else
+                    _gate.Set("放行", TwinUITone.Ok);
+                return;
+            }
+
+            string shortReason;
+            if (r.ReasonCode == ProcessStepGate.ReasonPrereqUnfinished) shortReason = "前置工步未完成";
+            else if (r.ReasonCode == ProcessStepGate.ReasonToolMismatch) shortReason = "工具不匹配";
+            else if (string.IsNullOrEmpty(r.ReasonCode)) shortReason = "拒绝";
+            else shortReason = r.ReasonCode;
+            _gate.Set(shortReason, TwinUITone.Crit);
         }
 
         private void UpdateButtonLabels()
@@ -218,7 +256,7 @@ namespace DigitalTwin.UI
             if (_btnDrag != null)
                 _btnDrag.Label.text = ("IK 拖拽: " + (_handle != null && _handle.EnableHandle ? "ON" : "OFF"));
             if (_btnLimit != null)
-                _btnLimit.Label.text = ("限幅 ±10°: " + (_limitOn ? "ON" : "OFF"));
+                _btnLimit.Label.text = ("限幅 ±30°: " + (_limitOn ? "ON" : "OFF"));
             if (_btnTcp != null)
                 _btnTcp.Label.text = ("TCP: " + (_tcp != null && !string.IsNullOrEmpty(_tcp.ActiveTcpName) ? (_tcp.ActiveTcpName.StartsWith("Flange") ? "F" : "S") : "S"));
             if (_btnAxes != null)

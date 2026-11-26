@@ -70,6 +70,14 @@ namespace DigitalTwin.UI
                 return false;
             }
 
+            // 第 4 章工艺/工具门禁：命中非法工艺步骤或工具不匹配时，UI 侧同样拦下并透传中文原因。
+            if (ProcessStepGate.HasResult && !ProcessStepGate.LastResult.Allowed)
+            {
+                var gate = ProcessStepGate.LastResult;
+                reason = "工艺门禁拒绝（" + gate.ReasonCode + "）：" + gate.Message;
+                return false;
+            }
+
             reason = "已授权";
             return true;
         }

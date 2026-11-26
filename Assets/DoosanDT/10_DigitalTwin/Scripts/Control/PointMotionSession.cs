@@ -1,4 +1,5 @@
 using System;
+using DigitalTwin.Interaction;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 using Unity.Robotics.ROSTCPConnector;
@@ -35,6 +36,13 @@ namespace DigitalTwin
         public double[] CurrentTcp { get; private set; }
         public int Version { get; private set; }
         public string RequestId { get; private set; } = Guid.NewGuid().ToString("N");
+        /// <summary>真正调用 /dt/cmd/motion 发布的次数（只在 Publish 时自增，消除 DispatchCalls 歧义）。</summary>
+        public int PublishedMotionCmdCount { get; private set; }
+        /// <summary>被第 4 章工艺/工具门禁拦下的次数。</summary>
+        public int BlockedByProcessGateCount { get; private set; }
+        /// <summary>最近一次工艺门禁结论（只读，供 UI/证据）。</summary>
+        public ProcessGateResult LastProcessGate => ProcessStepGate.LastResult;
+        public bool LastProcessGateHasResult => ProcessStepGate.HasResult;
         private ROSConnection _ros;
         private float _lastState = -100f;
         private JObject _preparedBody;
@@ -118,6 +126,7 @@ namespace DigitalTwin
         {
             Invalidate("重新校验");
             if (!Guard()) return false;
+            if (!CheckProcessGate()) return false;
             Version++;
             var body = new JObject { ["cmd"] = Mode == Motion.MoveJoint ? "move_joint" : Mode == Motion.MoveJointx ? "move_jointx" : "move_line",
                 ["mode"] = 0, ["tcp"] = "SIM_TCP", ["tool"] = "SIM_TOOL" };
@@ -147,8 +156,61 @@ namespace DigitalTwin
         {
             if (!Guard() || !Confirmed || _preparedBody == null || Time.unscaledTime - _preparedAt > 120f)
                 return Fail("确认已失效或缺少授权");
+            if (!CheckProcessGate()) return false;
             Send(Identity("execute", false)); SetState("SENDING", "等待厂商类型模拟服务受理");
             Authorized = false; return true;
+        }
+
+        // ── 第 4 章工艺/工具门禁（Ghost 目标 → 工艺顺序 / 工具属性 / 预标定点位绑定）──────
+        // 位置：Guard() 之后、真正构造/发送报文之前。被拒时置 BLOCKED 且不发布任何运动报文。
+
+        /// <summary>按"当前 Ghost 目标 + 当前 TCP 通道"评估工艺门禁；被拒则置 BLOCKED。</summary>
+        public bool CheckProcessGate()
+        {
+            return CheckProcessGate(ResolveGateTargetWorld(), ProcessStepGate.DefaultChannel);
+        }
+
+        /// <summary>显式评估（测试/预检用）：被拒时置 BLOCKED、计数 +1、且不发布。</summary>
+        public bool CheckProcessGate(Vector3 worldPos, ProcessToolChannel channel)
+        {
+            ProcessGateResult result;
+            if (ProcessStepGate.EvaluateTarget(worldPos, channel, out result))
+            {
+                return true;
+            }
+
+            BlockedByProcessGateCount++;
+            SetState("BLOCKED", "工艺门禁拒绝（" + result.ReasonCode + "）：" + result.Message);
+            return false;
+        }
+
+        /// <summary>Ghost 目标世界坐标：优先取 IK 手柄的 ghost 目标，其次用 MoveJoint 目标做 FK。</summary>
+        private Vector3 ResolveGateTargetWorld()
+        {
+            var handle = FindObjectOfType<TwinPlayIkHandle>();
+            if (handle != null && handle.Initialized)
+            {
+                return handle.TargetPosition;
+            }
+
+            if (Mode == Motion.MoveJoint && Target != null && Target.Length == 6)
+            {
+                var model = FindObjectOfType<RobotModelController>();
+                var switcher = FindObjectOfType<ToolTcpSwitcher>();
+                Transform tcp = switcher != null ? switcher.ActiveTcpTransform : null;
+                if (model != null && tcp != null)
+                {
+                    var q = Array.ConvertAll(Target, x => (float)x);
+                    Vector3 pos;
+                    Quaternion rot;
+                    if (model.EvaluateTcpPoseDegrees(q, tcp, Vector3.zero, Vector3.zero, out pos, out rot))
+                    {
+                        return pos;
+                    }
+                }
+            }
+
+            return Vector3.zero;
         }
         public void Cancel(bool estop = false)
         {
@@ -188,7 +250,11 @@ namespace DigitalTwin
             if (Estopped || (c != null && (c.IsEmergencyStopped || c.EnableRealRobotCommand))) return Fail("急停或真机配置阻断");
             return Connected || Fail("模拟通信断开或状态超过1秒");
         }
-        private void Send(JObject p) => _ros.Publish("/dt/cmd/motion", new StringMsg(p.ToString(Newtonsoft.Json.Formatting.None)));
+        private void Send(JObject p)
+        {
+            _ros.Publish("/dt/cmd/motion", new StringMsg(p.ToString(Newtonsoft.Json.Formatting.None)));
+            PublishedMotionCmdCount++;
+        }
         private bool Fail(string reason) { SetState("BLOCKED", reason); return false; }
         private void SetState(string state, string reason) { State = state; Reason = reason; Changed?.Invoke(); }
         private void OnCurrent(StringMsg message)
