@@ -28,9 +28,12 @@ namespace DigitalTwin.UI
         private TwinUiCardParts.Kv _rotErr;
         private TwinUiCardParts.Kv _iterations;
         private TwinUiCardParts.Kv _gate;
+        private TwinUiCardParts.Kv _ghost;
+        private TwinUiCardParts.Kv _vrd;
         private TMP_Text _note;
 
-        private TwinUIButton _btnDrag, _btnLimit, _btnTcp, _btnAxes, _btnRestore, _btnMarkers;
+        private TwinUIButton _btnDrag, _btnLimit, _btnTcp, _btnAxes, _btnRestore, _btnMarkers, _btnExecute;
+        private TwinUIButton _btnVrd, _btnScrew, _btnPlaneDown, _btnPlaneUp;
         private bool _limitOn = true;
         private bool _markersOn;
 
@@ -39,8 +42,8 @@ namespace DigitalTwin.UI
         public override string Kicker => "IK CONTROL";
         public override string Subtitle => "TwinPlayIkHandle / ±30° 每轴";
         public override string WorkspaceId => TwinUiWorkspaceRegistry.Twin;
-        public override Vector2 CardSize => new Vector2(340f, 510f);
-        public override Vector2 FloatingMinSize => new Vector2(310f, 444f);
+        public override Vector2 CardSize => new Vector2(340f, 624f);
+        public override Vector2 FloatingMinSize => new Vector2(310f, 548f);
 
         public override RectTransform Build(Transform parent, bool floating)
         {
@@ -57,28 +60,40 @@ namespace DigitalTwin.UI
             _rotErr = TwinUiCardParts.Row(root, 144f, "旋转误差", w);
             _iterations = TwinUiCardParts.Row(root, 168f, "迭代次数", w);
             _gate = TwinUiCardParts.Row(root, 192f, "工艺门禁", w);
+            _ghost = TwinUiCardParts.Row(root, 216f, "Ghost", w);
+            _vrd = TwinUiCardParts.Row(root, 240f, "VR_D 平面", w);
             _note = TwinUiCardParts.Caption(root,
-                "仅预览（Ghost）；真机下发锁定，执行需独立授权与安全评审", 0f, 218f, w, 30f);
+                "仅预览（Ghost）；真机下发锁定，执行需独立授权与安全评审", 0f, 266f, w, 30f);
 
             // ── 操作区：2 列 × 3 行原生按钮网格 ────────────────────────────
-            TwinUiCardParts.Section(root, "操作", 256f, w);
-            TwinUiCardParts.Divider(root, 272f, w);
+            TwinUiCardParts.Section(root, "操作", 304f, w);
+            TwinUiCardParts.Divider(root, 320f, w);
 
             const float colW = 148f;
             const float rowH = 26f;
             float x0 = 0f, x1 = colW + 10f;
             _btnDrag = TwinUIStyle.Button(root, "BtnIkDrag", "IK 拖拽: OFF", TwinUIButton.Kind.Plain,
-                new Vector2(x0, -286f), new Vector2(colW, rowH), OnToggleDrag);
+                new Vector2(x0, -334f), new Vector2(colW, rowH), OnToggleDrag);
             _btnLimit = TwinUIStyle.Button(root, "BtnJointLimit", "限幅 ±30°: ON", TwinUIButton.Kind.Plain,
-                new Vector2(x1, -286f), new Vector2(colW, rowH), OnToggleLimit);
+                new Vector2(x1, -334f), new Vector2(colW, rowH), OnToggleLimit);
             _btnTcp = TwinUIStyle.Button(root, "BtnTcp", "TCP: S", TwinUIButton.Kind.Plain,
-                new Vector2(x0, -318f), new Vector2(colW, rowH), OnToggleTcp);
+                new Vector2(x0, -366f), new Vector2(colW, rowH), OnToggleTcp);
             _btnAxes = TwinUIStyle.Button(root, "BtnTcpAxes", "坐标轴: OFF", TwinUIButton.Kind.Plain,
-                new Vector2(x1, -318f), new Vector2(colW, rowH), OnToggleAxes);
+                new Vector2(x1, -366f), new Vector2(colW, rowH), OnToggleAxes);
             _btnRestore = TwinUIStyle.Button(root, "BtnRestorePose", "姿态复位", TwinUIButton.Kind.Default,
-                new Vector2(x0, -350f), new Vector2(colW, rowH), OnRestorePose);
+                new Vector2(x0, -398f), new Vector2(colW, rowH), OnRestorePose);
             _btnMarkers = TwinUIStyle.Button(root, "BtnMarkers", "点位标注: OFF", TwinUIButton.Kind.Plain,
-                new Vector2(x1, -350f), new Vector2(colW, rowH), OnToggleMarkers);
+                new Vector2(x1, -398f), new Vector2(colW, rowH), OnToggleMarkers);
+            _btnExecute = TwinUIStyle.Button(root, "BtnGhostExecute", "执行 (Ghost→实体)", TwinUIButton.Kind.Default,
+                new Vector2(x0, -430f), new Vector2(colW * 2f + 10f, rowH), OnExecuteGhost);
+            _btnVrd = TwinUIStyle.Button(root, "BtnVrd", "VR_D: OFF", TwinUIButton.Kind.Plain,
+                new Vector2(x0, -462f), new Vector2(colW, rowH), OnToggleVrd);
+            _btnScrew = TwinUIStyle.Button(root, "BtnScrewReplay", "Screw 拆解", TwinUIButton.Kind.Default,
+                new Vector2(x1, -462f), new Vector2(colW, rowH), OnStartScrewReplay);
+            _btnPlaneDown = TwinUIStyle.Button(root, "BtnPlaneDown", "面高 -5mm", TwinUIButton.Kind.Plain,
+                new Vector2(x0, -494f), new Vector2(colW, rowH), () => OnNudgePlane(-5));
+            _btnPlaneUp = TwinUIStyle.Button(root, "BtnPlaneUp", "面高 +5mm", TwinUIButton.Kind.Plain,
+                new Vector2(x1, -494f), new Vector2(colW, rowH), () => OnNudgePlane(5));
 
             if (_btnDrag != null) _btnDrag.Label.fontSize = TwinUIStyle.FontUnit;
             if (_btnLimit != null) _btnLimit.Label.fontSize = TwinUIStyle.FontUnit;
@@ -86,8 +101,13 @@ namespace DigitalTwin.UI
             if (_btnAxes != null) _btnAxes.Label.fontSize = TwinUIStyle.FontUnit;
             if (_btnRestore != null) _btnRestore.Label.fontSize = TwinUIStyle.FontUnit;
             if (_btnMarkers != null) _btnMarkers.Label.fontSize = TwinUIStyle.FontUnit;
+            if (_btnExecute != null && _btnExecute.Label != null) _btnExecute.Label.fontSize = TwinUIStyle.FontUnit;
 
-            foreach (var b in new[] { _btnDrag, _btnLimit, _btnTcp, _btnAxes, _btnRestore, _btnMarkers })
+            foreach (var b in new[]
+                     {
+                         _btnDrag, _btnLimit, _btnTcp, _btnAxes, _btnRestore, _btnMarkers, _btnExecute,
+                         _btnVrd, _btnScrew, _btnPlaneDown, _btnPlaneUp
+                     })
             {
                 if (b == null || b.Label == null) continue;
                 b.Label.enableAutoSizing = true;
@@ -153,6 +173,56 @@ namespace DigitalTwin.UI
             Refresh();
         }
 
+        /// <summary>「执行 (Ghost→实体)」：实体按真机参考速度阻尼跟随到 Ghost 姿态（纯本地）。</summary>
+        private void OnExecuteGhost()
+        {
+            Resolve();
+            if (_handle == null) return;
+            bool started = _handle.ExecuteGhostToEntity();
+            if (!started) Debug.Log("[UI-IK] execute ignored: 需要先开 IK 拖拽并产生 Ghost 解或吸附");
+            Refresh();
+        }
+
+        /// <summary>VR_D 开关：自由模式 ⇄ 实训约束（安全网格面 + 两级拦截）。</summary>
+        private void OnToggleVrd()
+        {
+            Resolve();
+            if (_handle == null) return;
+            _handle.SetVrdEnabled(!_handle.VrdEnabled);
+            Refresh();
+        }
+
+        /// <summary>网格面高度 ±5 mm 步进。</summary>
+        private void OnNudgePlane(int deltaMm)
+        {
+            Resolve();
+            if (_handle == null) return;
+            _handle.NudgeVrdPlaneOffset(deltaMm);
+            Refresh();
+        }
+
+        /// <summary>「Screw 拆解」：门槛不满足时只给中文提示，不启动。</summary>
+        private void OnStartScrewReplay()
+        {
+            Resolve();
+            if (_handle == null) return;
+            if (_handle.ScrewReplayPlaying)
+            {
+                _handle.StopScrewReplay();
+                Refresh();
+                return;
+            }
+            string reason;
+            if (!_handle.CanStartScrewReplay(out reason))
+            {
+                Debug.Log("[UI-IK] screw replay blocked: " + reason);
+                Refresh();
+                return;
+            }
+            _handle.StartScrewReplay();
+            Refresh();
+        }
+
         private void OnToggleMarkers()
         {
             Resolve();
@@ -190,6 +260,8 @@ namespace DigitalTwin.UI
                 _rotErr.Set(TwinUITextR3.Placeholder, TwinUITone.Unknown);
                 _iterations.Set(TwinUITextR3.Placeholder, TwinUITone.Unknown);
                 UpdateGateRow();
+                UpdateGhostRow();
+                UpdateVrdRow();
                 UpdateButtonLabels();
                 return;
             }
@@ -215,12 +287,72 @@ namespace DigitalTwin.UI
                 _handle.RotationErrorDeg > 5f ? TwinUITone.Warn : TwinUITone.Ok);
             _iterations.Set(_handle.Iterations.ToString(), TwinUITone.Ok);
             UpdateGateRow();
+            UpdateGhostRow();
+            UpdateVrdRow();
             _note.color = _handle.AllowRobotDispatch ? TwinUITheme.ToneTextColor(TwinUITone.Crit) : TwinUIStyle.QuietColor;
+
+            if (_btnExecute != null)
+            {
+                bool canExec = !_handle.GhostExecuting && _handle.GhostVisible &&
+                               (_handle.GhostSnapEnabled || _handle.HasSolution) &&
+                               !(_handle.VrdEnabled && _handle.VrdBlocked);
+                _btnExecute.SetInteractable(canExec);
+            }
+            if (_btnScrew != null)
+            {
+                string reason;
+                bool canReplay = _handle.CanStartScrewReplay(out reason);
+                _btnScrew.SetInteractable(canReplay || _handle.ScrewReplayPlaying);
+                _btnScrew.Label.text = _handle.ScrewReplayPlaying
+                    ? ("拆解中 " + Mathf.RoundToInt(_handle.ScrewReplayProgress * 100f) + "%")
+                    : "Screw 拆解";
+            }
 
             UpdateButtonLabels();
         }
 
         /// <summary>第 4 章工艺/工具门禁只读行：放行显示绑定点位，拒绝显示中文原因（短标签，避免窄栏溢出）。</summary>
+        /// <summary>Ghost 状态行：自由拖动 / 已吸附: X / 执行中 n% / 未启用。</summary>
+        /// <summary>VR_D 行：OFF / ON · 面高 ±x.x mm / 拦截原因。</summary>
+        private void UpdateVrdRow()
+        {
+            if (_vrd.Value == null) return;
+            if (_handle == null || !_handle.VrdEnabled)
+            {
+                _vrd.Set("OFF", TwinUITone.Unknown);
+                return;
+            }
+            string off = _handle.VrdPlaneOffsetMm.ToString("+0.0;-0.0;0.0") + " mm";
+            if (_handle.VrdBlocked)
+            {
+                string code = _handle.VrdReasonCode == "BELOW_SAFETY_PLANE" ? "低于平面" : "门禁拦截";
+                _vrd.Set(code + " · " + off, TwinUITone.Crit);
+                return;
+            }
+            _vrd.Set("ON · " + off, TwinUITone.Ok);
+        }
+
+        private void UpdateGhostRow()
+        {
+            if (_ghost.Value == null) return;
+            if (_handle == null || !_handle.GhostVisible)
+            {
+                _ghost.Set("未启用", TwinUITone.Unknown);
+                return;
+            }
+            if (_handle.GhostExecuting)
+            {
+                _ghost.Set("执行中 " + Mathf.RoundToInt(_handle.GhostExecProgress * 100f) + "%", TwinUITone.Warn);
+                return;
+            }
+            if (_handle.SnapActive && !string.IsNullOrEmpty(_handle.SnapWaypointName))
+            {
+                _ghost.Set("已吸附: " + _handle.SnapWaypointName, TwinUITone.Ok);
+                return;
+            }
+            _ghost.Set("自由拖动", TwinUITone.Ok);
+        }
+
         private void UpdateGateRow()
         {
             if (_gate.Value == null) return;
@@ -263,6 +395,8 @@ namespace DigitalTwin.UI
                 _btnAxes.Label.text = ("坐标轴: " + (_axis != null && _axis.Visible ? "ON" : "OFF"));
             if (_btnMarkers != null)
                 _btnMarkers.Label.text = ("点位标注: " + (_markersOn ? "ON" : "OFF"));
+            if (_btnVrd != null)
+                _btnVrd.Label.text = ("VR_D: " + (_handle != null && _handle.VrdEnabled ? "ON" : "OFF"));
         }
     }
 }

@@ -30020,6 +30020,17 @@ MonoBehaviour:
   playCamera: {fileID: 330585545}
   ikController: {fileID: 1310431457}
   commandController: {fileID: 1899119578}
+  ghostPreviewEnabled: 1
+  maxJointSpeedDegPerSec: 20
+  ghostSmoothingTau: 0.08
+  ghostSnapEnabled: 1
+  snapEnterRadius: 0.045
+  snapExitRadius: 0.075
+  executeToleranceDeg: 0.05
+  vrdEnabled: 0
+  vrdPlaneOffsetMm: 0
+  vrdPlaneBaseY: 1.2631
+  vrdBelowTolerance: 0.002
   idleColor: {r: 0.13, g: 0.85, b: 0.94, a: 1}
   hoverColor: {r: 0.55, g: 0.95, b: 1, a: 1}
   dragColor: {r: 0.96, g: 0.65, b: 0.14, a: 1}

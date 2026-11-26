@@ -49,6 +49,52 @@ namespace DigitalTwin.Interaction
         [Tooltip("场景中的 TwinCommandController（ghost 目标缓存）。")]
         [SerializeField] private TwinCommandController commandController;
 
+        [Header("Ghost 半透明预演（MoveIt2 风格）")]
+        [Tooltip("开启后：IK 拖拽只驱动半透明 Ghost 骨架，实体静止；点「执行」才按真机速度阻尼跟随。")]
+        [SerializeField] private bool ghostPreviewEnabled = true;
+        [Tooltip("实体执行时的关节角速度上限（度/秒）。取自 E5 真机 RT 实测 dq 的保守值，可调。")]
+        [SerializeField, Range(1f, 120f)] private float maxJointSpeedDegPerSec = 20f;
+        [Tooltip("Ghost 拖拽阻尼时间常数（秒）。越小越跟手，越大越沉稳。")]
+        [SerializeField, Range(0.01f, 0.5f)] private float ghostSmoothingTau = 0.08f;
+        [Tooltip("是否启用三点位（Home_VR_DT / Safty_1 / Screw_10）双阈值滞回磁吸。")]
+        [SerializeField] private bool ghostSnapEnabled = true;
+        [Tooltip("吸合半径（米）：手柄目标进入该半径即吸附到该标定点精确关节角。")]
+        [SerializeField, Range(0.005f, 0.15f)] private float snapEnterRadius = 0.045f;
+        [Tooltip("挣脱半径（米）：拖离超过该半径才解除吸附，避免边界抖动/粘死。")]
+        [SerializeField, Range(0.01f, 0.3f)] private float snapExitRadius = 0.075f;
+        [Tooltip("执行到位的关节角容差（度/轴）。")]
+        [SerializeField, Range(0.01f, 1f)] private float executeToleranceDeg = 0.05f;
+
+        private GhostArm _ghost;
+        private float[] _ghostJoints = new float[6];
+        private float[] _snapJointDeg;
+        private string _snapName = string.Empty;
+        private bool _snapActive;
+        private bool _snapArmed;
+        private bool _executing;
+        private float _execProgress;
+        private float _execWorstSpeed;
+        private float _execPeakErrDeg;
+        private Coroutine _execRoutine;
+
+        [Header("VR_D 实训约束：电池包顶面安全网格面")]
+        [Tooltip("VR_D = ON 时显示安全网格面并启用「安全高度 + 工艺门禁」两级拦截；OFF = 自由模式。")]
+        [SerializeField] private bool vrdEnabled;
+        [Tooltip("网格面高度微调（毫米），相对电池包顶面基准 Y。正 = 抬高。")]
+        [SerializeField, Range(-50f, 50f)] private float vrdPlaneOffsetMm;
+        [Tooltip("电池包顶面基准 Y（实测 1.2631 m）。")]
+        [SerializeField] private float vrdPlaneBaseY = VrdSafetyPlane.DefaultPlaneY;
+        [Tooltip("表面禁区判定的下压容差（米）：TCP 低于 planeY - 该值即判定 BELOW_SAFETY_PLANE。")]
+        [SerializeField] private float vrdBelowTolerance = 0.002f;
+
+        private VrdSafetyPlane _plane;
+        private ScrewReplayPlayer _replay;
+        private bool _vrdBlocked;
+        private string _vrdReason = "OFF";
+        private string _vrdMessage = string.Empty;
+        private float _ghostOpacity = 1f;
+        private readonly float[] _vrdGhostTcp = new float[6];
+
         /// <summary>三轴显示/锁轴使用的参考系。</summary>
         public enum AxisFrameMode
         {
@@ -265,6 +311,10 @@ namespace DigitalTwin.Interaction
             ikController.SetTargetPose(pos, rot);
             ikController.ResetTargetToTcp();
             _hasPendingTarget = false;
+            _snapActive = false;
+            _snapArmed = false;
+            _snapName = string.Empty;
+            _snapJointDeg = null;
             InvalidateHandleFrame();
             CaptureHandleFrame();
             EnsureVisuals();
@@ -297,6 +347,10 @@ namespace DigitalTwin.Interaction
             {
                 _dragging = false;
                 _hasPendingTarget = false;
+                StopGhostExecution(false);
+                if (_ghost != null) _ghost.Hide();
+                _snapActive = false;
+                _snapName = string.Empty;
                 if (_sphereGo != null) _sphereGo.SetActive(false);
                 if (_handleRoot != null) _handleRoot.gameObject.SetActive(false);
                 // 关闭拖拽 = IK 彻底休眠，常态（真机/回放）零干扰。
@@ -309,9 +363,16 @@ namespace DigitalTwin.Interaction
                 if (_sphereGo != null) _sphereGo.SetActive(true);
                 // 以“此刻的姿态”作为 ±30° 限幅基准，避免开启瞬间就被大角度解带飞。
                 if (ikController != null) ikController.CaptureJointReference();
+                // Ghost 与实体当前姿态完全重合（q_entity），随后拖动只动 Ghost。
+                EnsureGhost();
                 RecaptureTcp();
                 SetIkSolverActive(true);
                 SetDriveSuppressed(true);
+                // 立刻求解一次：让 手柄状态 从 `Disabled`（求解器休眠时的 LastStatus）切到真实状态，
+                // 否则卡片会一直显示上一次的旧文案（用户看到 `手柄状态: Disabled` 的根因）。
+                SolveNow();
+                Debug.Log(LogTag + " drag ON → status=" + _statusText + " ghost=" +
+                          (_ghost != null ? (_ghost.Visible ? "visible" : "hidden") : "null"));
             }
             Debug.Log("[PLAY-IK] drag enabled=" + value);
         }
@@ -323,6 +384,13 @@ namespace DigitalTwin.Interaction
         {
             _dragging = false;
             _hasPendingTarget = false;
+            // 执行途中被复位：立即中止跟随（下面会把实体安全送回 Home_VR_DT）。
+            StopGhostExecution(false);
+            StopScrewReplay();
+            _snapActive = false;
+            _snapArmed = false;
+            _snapName = string.Empty;
+            if (_ghost != null) _ghost.Hide();
             if (_sphereGo != null) _sphereGo.SetActive(false);
             // 复位即让 IK 休眠，避免残留解继续驱动模型。
             SetIkSolverActive(false);
@@ -545,6 +613,12 @@ namespace DigitalTwin.Interaction
             }
 
             _leftHeldPrev = leftHeld;
+
+            // Ghost 预演动画必须逐帧推进（求解只有 20 Hz）：把解/磁吸角按速度上限 + 阻尼插值
+            // 平滑推向 Ghost 骨架；实体保持静止，直到点「执行」。
+            UpdateVrd();
+            UpdateGhostFromSolution();
+            UpdateGhostOpacity();
 
             UpdateVisuals();
             UpdateHud();
@@ -999,7 +1073,8 @@ namespace DigitalTwin.Interaction
             try
             {
                 ikController.SetTargetPose(_targetPosition, _targetRotation);
-                ikController.TrySolve(true);
+                // Ghost 预演：只求解，不把解写回实体（实体在「执行」前保持静止）。
+                ikController.TrySolve(!GhostOnlyMode);
             }
             catch (Exception e)
             {
@@ -1076,6 +1151,7 @@ namespace DigitalTwin.Interaction
             // 命中非法工艺步骤或工具不匹配时 LastResult.Allowed=false，卡片显示红字原因；
             // 命中螺钉区则绑定预标定点位（Screw_10 / E5_SCREW_DISASSEMBLY）供 Ghost 预览与派发使用。
             EvaluateProcessGate();
+
 
             if (!_reachable)
             {
@@ -1474,6 +1550,525 @@ namespace DigitalTwin.Interaction
             line.endColor = color;
             line.enabled = true;
             return line;
+        }
+
+        // ==================== VR_D 实训约束：电池包顶面安全网格面 + 两级拦截 ====================
+
+        public bool VrdEnabled => vrdEnabled;
+        public bool VrdBlocked => vrdEnabled && _vrdBlocked;
+        public string VrdReasonCode => _vrdReason;
+        public string VrdMessage => _vrdMessage;
+        public float VrdPlaneOffsetMm => vrdPlaneOffsetMm;
+        public float VrdPlaneWorldY => _plane != null ? _plane.CurrentWorldY
+            : vrdPlaneBaseY + vrdPlaneOffsetMm * 0.001f;
+        public VrdSafetyPlane SafetyPlane => _plane;
+        public ScrewReplayPlayer Replay => _replay;
+        public bool ScrewReplayPlaying => _replay != null && _replay.Playing;
+        public float ScrewReplayProgress => _replay != null ? _replay.Progress : 0f;
+        public float GhostOpacity => _ghostOpacity;
+
+        /// <summary>VR_D 开关（自由模式 ⇄ 实训约束模式）。</summary>
+        public void SetVrdEnabled(bool value)
+        {
+            vrdEnabled = value;
+            EnsureVrdPlane();
+            if (_plane != null)
+            {
+                if (value) _plane.Show();
+                else _plane.Hide();
+            }
+            _vrdBlocked = false;
+            _vrdReason = value ? "OK" : "OFF";
+            _vrdMessage = value ? "VR_D 约束已开启" : "自由模式（无表面禁区）";
+            Debug.Log(LogTag + " VR_D=" + value + " planeY=" + VrdPlaneWorldY.ToString("F4") + "m");
+        }
+
+        /// <summary>网格面高度步进（毫米）。</summary>
+        public void NudgeVrdPlaneOffset(int deltaMm)
+        {
+            vrdPlaneOffsetMm = Mathf.Clamp(vrdPlaneOffsetMm + deltaMm, -50f, 50f);
+            EnsureVrdPlane();
+            if (_plane != null) _plane.SetOffsetMm(vrdPlaneOffsetMm);
+            Debug.Log(LogTag + " plane offset=" + vrdPlaneOffsetMm.ToString("+0.0;-0.0") + "mm → Y=" +
+                      VrdPlaneWorldY.ToString("F4") + "m");
+        }
+
+        private void EnsureVrdPlane()
+        {
+            if (_plane != null) return;
+            Vector2 center = VrdSafetyPlane.DefaultCenterXz;
+            Vector2 size = VrdSafetyPlane.DefaultSizeXz;
+            if (TryGetDis1Bounds(out Bounds b))
+            {
+                center = new Vector2(b.center.x, b.center.z);
+                size = new Vector2(b.size.x + VrdSafetyPlane.DefaultMarginMeters * 2f,
+                                   b.size.z + VrdSafetyPlane.DefaultMarginMeters * 2f);
+            }
+            _plane = VrdSafetyPlane.Create(vrdPlaneBaseY, center, size);
+            _plane.SetOffsetMm(vrdPlaneOffsetMm);
+            if (vrdEnabled) _plane.Show();
+        }
+
+        private static bool TryGetDis1Bounds(out Bounds bounds)
+        {
+            bounds = default(Bounds);
+            GameObject go = GameObject.Find("Dis_1");
+            if (go == null) return false;
+            Renderer[] renderers = go.GetComponentsInChildren<Renderer>(true);
+            bool any = false;
+            foreach (Renderer r in renderers)
+            {
+                if (r == null) continue;
+                if (!any) { bounds = r.bounds; any = true; }
+                else bounds.Encapsulate(r.bounds);
+            }
+            return any;
+        }
+
+        /// <summary>每帧刷新 VR_D 两级判定：① 安全高度（最高优先） ② 表面之上的工艺/工具门禁。</summary>
+        private void UpdateVrd()
+        {
+            if (!vrdEnabled)
+            {
+                _vrdBlocked = false;
+                _vrdReason = "OFF";
+                _vrdMessage = "自由模式（无表面禁区）";
+                if (_plane != null && _plane.Visible) _plane.Hide();
+                return;
+            }
+
+            EnsureVrdPlane();
+            if (_plane == null)
+            {
+                _vrdBlocked = false;
+                _vrdReason = "PLANE_UNAVAILABLE";
+                return;
+            }
+            if (!_plane.Visible) _plane.Show();
+
+            float planeY = _plane.CurrentWorldY;
+            float tipY = GhostTcpWorldY();
+            bool below = tipY < planeY - vrdBelowTolerance;
+
+            if (below)
+            {
+                _vrdBlocked = true;
+                _vrdReason = "BELOW_SAFETY_PLANE";
+                _vrdMessage = "低于电池包安全平面，禁止下压";
+            }
+            else if (ProcessStepGate.HasResult && !ProcessStepGate.LastResult.Allowed)
+            {
+                _vrdBlocked = true;
+                _vrdReason = ProcessStepGate.LastResult.ReasonCode;
+                _vrdMessage = ProcessStepGate.LastResult.Message;
+            }
+            else
+            {
+                _vrdBlocked = false;
+                _vrdReason = "OK";
+                _vrdMessage = _snapActive ? ("安全 · 已吸附 " + _snapName) : "安全 · 可执行";
+            }
+            _plane.SetWarn(_vrdBlocked);
+        }
+
+        private float GhostTcpWorldY()
+        {
+            if (_ghost != null && _ghost.SpindleTcp != null) return _ghost.SpindleTcp.position.y;
+            if (ikController != null && ikController.TryGetCurrentTcpPose(out Vector3 p, out _)) return p.y;
+            return float.MaxValue;
+        }
+
+        /// <summary>重叠消隐：Ghost 与实体完全重合且未拖动时淡出，消除 Z-fighting 斑纹；一拖动立即淡入。</summary>
+        private void UpdateGhostOpacity()
+        {
+            if (_ghost == null || !_ghost.Visible) return;
+            float sep = 0f;
+            RobotModelController model = Model;
+            if (model != null)
+            {
+                float[] q = model.ReadCurrentDisplayDegrees();
+                if (q != null)
+                {
+                    for (int i = 0; i < _ghostJoints.Length && i < q.Length; i++)
+                        sep = Mathf.Max(sep, Mathf.Abs(_ghostJoints[i] - q[i]));
+                }
+            }
+            bool coincident = !_dragging && !_snapActive && sep < 0.05f;
+            float target = coincident ? 0f : 1f;
+            _ghostOpacity = Mathf.MoveTowards(_ghostOpacity, target, Time.unscaledDeltaTime / 0.12f);
+            _ghost.SetOpacity(_ghostOpacity);
+        }
+
+        /// <summary>实体当前 6 轴与 Screw_10 标定角的最大偏差（度）；&lt;0 表示拿不到标定点。</summary>
+        public float EntityToScrew10MaxErrDeg()
+        {
+            RobotModelController model = Model;
+            if (model == null) return -1f;
+            ProcessWaypoints.Waypoint w;
+            if (!ProcessWaypoints.TryGet("Screw_10", out w)) return -1f;
+            float[] q = model.ReadCurrentDisplayDegrees();
+            if (q == null) return -1f;
+            float m = 0f;
+            for (int i = 0; i < 6 && i < q.Length && i < w.JointDeg.Length; i++)
+                m = Mathf.Max(m, Mathf.Abs(q[i] - w.JointDeg[i]));
+            return m;
+        }
+
+        /// <summary>Screw 拆解启动门槛：VR_D 开 + 实体到位 Screw_10(&lt;0.5°) + 工艺门禁 OK。</summary>
+        public bool CanStartScrewReplay(out string reason)
+        {
+            if (!vrdEnabled) { reason = "请先开启 VR_D"; return false; }
+            if (ScrewReplayPlaying) { reason = "回放进行中"; return false; }
+            float err = EntityToScrew10MaxErrDeg();
+            if (err < 0f) { reason = "未找到 Screw_10 标定点"; return false; }
+            if (err >= 0.5f)
+            {
+                reason = "请先开启 VR_D 并将实体执行到位至 Screw_10（当前偏差 " + err.ToString("F2") + "°）";
+                return false;
+            }
+            if (!ProcessStepGate.HasResult || !ProcessStepGate.LastResult.Allowed)
+            {
+                reason = "工艺门禁未放行（" + _vrdReason + "）";
+                return false;
+            }
+            reason = "OK";
+            return true;
+        }
+
+        public bool StartScrewReplay()
+        {
+            string reason;
+            if (!CanStartScrewReplay(out reason))
+            {
+                _vrdMessage = reason;
+                Debug.LogWarning(LogTag + " screw replay rejected: " + reason);
+                return false;
+            }
+
+            RobotModelController model = Model;
+            if (model == null) { _vrdMessage = "机械臂模型缺失"; return false; }
+
+            StopGhostExecution(false);
+            if (_ghost != null) _ghost.Hide();
+
+            if (_replay == null) _replay = gameObject.AddComponent<ScrewReplayPlayer>();
+            DigitalTwinRuntime runtime = FindObjectOfType<DigitalTwinRuntime>();
+            Transform tcp = ikController != null ? ikController.TcpTransform : null;
+            if (!_replay.Play(model, runtime, tcp))
+            {
+                _vrdMessage = "回放数据加载失败：" + _replay.LoadError;
+                Debug.LogError(LogTag + " screw replay load failed: " + _replay.LoadError);
+                return false;
+            }
+
+            _vrdMessage = "E5 拆解回放中…";
+            Debug.Log(LogTag + " screw replay started: samples=" + _replay.SampleCount +
+                      " dur=" + _replay.Duration.ToString("F2") + "s force=" + _replay.HasForceChannel);
+            return true;
+        }
+
+        public void StopScrewReplay()
+        {
+            if (_replay == null) return;
+            _replay.Stop();
+            RobotModelController model = Model;
+            if (model != null)
+            {
+                float[] q = model.ReadCurrentDisplayDegrees();
+                if (q != null)
+                {
+                    for (int i = 0; i < _ghostJoints.Length && i < q.Length; i++) _ghostJoints[i] = q[i];
+                    if (_ghost != null) _ghost.SetJoints(_ghostJoints);
+                }
+            }
+        }
+
+        // ==================== Ghost 半透明预演 / 三点位磁吸 / 阻尼执行（MoveIt2 风格）====================
+
+        /// <summary>Ghost 预演是否生效：拖动只动 Ghost，实体静止（「执行」时才动实体）。</summary>
+        public bool GhostOnlyMode => ghostPreviewEnabled && enableHandle && _ghost != null && _ghost.Visible;
+
+        public GhostArm Ghost => _ghost;
+        public bool GhostVisible => _ghost != null && _ghost.Visible;
+        public bool GhostPreviewEnabled => ghostPreviewEnabled;
+        public bool SnapActive => _snapActive;
+        public string SnapWaypointName => _snapName;
+        public bool GhostExecuting => _executing;
+        public float GhostExecProgress => _execProgress;
+        public float GhostExecWorstSpeedDegPerSec => _execWorstSpeed;
+        public float MaxJointSpeedDegPerSec => maxJointSpeedDegPerSec;
+        public float GhostSmoothingTau => ghostSmoothingTau;
+        public float SnapEnterRadius => snapEnterRadius;
+        public float SnapExitRadius => snapExitRadius;
+        public float ExecuteToleranceDeg => executeToleranceDeg;
+        public bool GhostSnapEnabled => ghostSnapEnabled;
+
+        public float[] GhostJointDegreesCopy() => (float[])_ghostJoints.Clone();
+
+        public float[] EntityJointDegreesCopy()
+        {
+            RobotModelController model = Model;
+            return model != null ? model.ReadCurrentDisplayDegrees() : null;
+        }
+
+        public void SetGhostSnapEnabled(bool value)
+        {
+            ghostSnapEnabled = value;
+            if (!value) { _snapActive = false; _snapName = string.Empty; _snapJointDeg = null; }
+        }
+
+        public void SetMaxJointSpeedDegPerSec(float value)
+        {
+            maxJointSpeedDegPerSec = Mathf.Clamp(value, 1f, 120f);
+        }
+
+        /// <summary>编程设置手柄目标（等价于把球拖到该点）；供"去点位"与自动验收使用。</summary>
+        public void SetTargetPosition(Vector3 position)
+        {
+            if (!IsFinite(position)) return;
+            // 走既有拖动管线：步长不限（直接到位）+ 立即求解，并保留工作空间钳制与限位硬停止。
+            ApplyTargetStep(position, false, true, true);
+        }
+
+        private RobotModelController Model
+        {
+            get
+            {
+                if (ikController == null) return null;
+                if (ikController.RobotModel != null) return ikController.RobotModel;
+                return ikController.GetComponent<RobotModelController>();
+            }
+        }
+
+        /// <summary>创建/重置 Ghost：与实体当前 6 轴完全重合，随后拖动只动 Ghost。</summary>
+        private void EnsureGhost()
+        {
+            if (!ghostPreviewEnabled) return;
+            RobotModelController model = Model;
+            if (model == null) return;
+
+            try
+            {
+                if (_ghost == null)
+                {
+                    _ghost = GhostArm.Create(model, null);
+                    if (_ghost == null)
+                    {
+                        Debug.LogWarning(LogTag + " ghost arm create failed (Clone returned null)");
+                        return;
+                    }
+                    ProcessWaypoints.Ensure(model);
+                }
+            }
+            catch (System.Exception e)
+            {
+                _ghost = null;
+                Debug.LogError(LogTag + " ghost arm create threw: " + e.GetType().Name + ": " + e.Message +
+                               "\n" + e.StackTrace);
+                return;
+            }
+
+            float[] q = model.ReadCurrentDisplayDegrees();
+            if (q != null)
+            {
+                for (int i = 0; i < _ghostJoints.Length && i < q.Length; i++) _ghostJoints[i] = q[i];
+            }
+
+            _snapActive = false;
+            _snapArmed = false;
+            _snapName = string.Empty;
+            _snapJointDeg = null;
+            _ghost.SetJoints(_ghostJoints);
+            _ghost.Show();
+            _ghost.SetTint(GhostArm.Tint.Normal);
+            Debug.Log(LogTag + " ghost armed (q_entity=[" + FormatDeg(_ghostJoints) + "])");
+        }
+
+        /// <summary>每帧把 IK 解（或磁吸标定角）按速度上限 + 一阶阻尼推给 Ghost。</summary>
+        private void UpdateGhostFromSolution()
+        {
+            if (!ghostPreviewEnabled || _executing) return;
+            if (_ghost == null || !_ghost.Visible) return;
+            RobotModelController model = Model;
+            if (model == null) return;
+
+            // ① 三点位双阈值滞回磁吸（以手柄目标位置判定，与鼠标一致）
+            //    注意：刚开 IK 时手柄目标恰好在实体 TCP 上（≈ Home_VR_DT），若不设"武装"条件，
+            //    一开启就会立刻吸附到 Home 并把 Ghost 钉死 → 用户看到"拖不动/没分离"。
+            //    所以必须先真正拖离起点超过吸合半径，磁吸才会生效。
+            if (ProcessWaypoints.All.Count == 0) ProcessWaypoints.Ensure(model);
+            if (!_snapArmed && Vector3.Distance(_targetPosition, _initialTcpPosition) > snapEnterRadius)
+            {
+                _snapArmed = true;
+            }
+            if (ghostSnapEnabled && _snapArmed)
+            {
+                ProcessWaypoints.Waypoint near;
+                float dist;
+                bool found = ProcessWaypoints.TryFindNearest(_targetPosition, out near, out dist);
+                float threshold = _snapActive ? snapExitRadius : snapEnterRadius;
+                if (found && dist <= threshold)
+                {
+                    if (!_snapActive || _snapName != near.Name)
+                    {
+                        Debug.Log(LogTag + " snap ON → " + near.Name + " d=" + dist.ToString("F3") + "m (enter " +
+                                  snapEnterRadius.ToString("F3") + ")");
+                    }
+                    _snapActive = true;
+                    _snapName = near.Name;
+                    _snapJointDeg = near.JointDeg;
+                }
+                else if (_snapActive)
+                {
+                    Debug.Log(LogTag + " snap OFF (d=" + dist.ToString("F3") + "m > exit " +
+                              threshold.ToString("F3") + "m)");
+                    _snapActive = false;
+                    _snapName = string.Empty;
+                    _snapJointDeg = null;
+                }
+            }
+            else
+            {
+                _snapActive = false;
+                _snapName = string.Empty;
+                _snapJointDeg = null;
+            }
+
+            // ② 目标关节角：吸附 → 精确标定角；否则 → IK 解
+            float[] desired = _snapActive ? _snapJointDeg : (_hasSolution ? _lastSolution : null);
+            if (desired == null) return;
+
+            // ③ 速度上限 + 一阶阻尼插值（消除鼠标瞬跳）
+            float dt = Mathf.Max(1f / 240f, Time.unscaledDeltaTime);
+            float maxStep = maxJointSpeedDegPerSec * dt;
+            float k = ghostSmoothingTau <= 0.0001f ? 1f : 1f - Mathf.Exp(-dt / ghostSmoothingTau);
+            int n = Mathf.Min(_ghostJoints.Length, desired.Length);
+            for (int i = 0; i < n; i++)
+            {
+                float delta = (desired[i] - _ghostJoints[i]) * k;
+                _ghostJoints[i] += Mathf.Clamp(delta, -maxStep, maxStep);
+            }
+            _ghost.SetJoints(_ghostJoints);
+
+            // ④ 着色：吸附青绿 / 门禁拦截红 / 自由蓝
+            bool blocked = (vrdEnabled && _vrdBlocked) ||
+                           (ProcessStepGate.HasResult && !ProcessStepGate.LastResult.Allowed);
+            _ghost.SetTint(blocked ? GhostArm.Tint.Blocked
+                : _snapActive ? GhostArm.Tint.Snap : GhostArm.Tint.Normal);
+        }
+
+        /// <summary>点击「执行 (Ghost→实体)」：实体按真机参考速度 + 阻尼加减速平滑移动到 Ghost 姿态。</summary>
+        public bool ExecuteGhostToEntity()
+        {
+            if (_executing) return false;
+            RobotModelController model = Model;
+            if (model == null || _ghost == null || !_ghost.Visible) return false;
+            if (!_hasSolution && !_snapActive) return false;
+            if (vrdEnabled && _vrdBlocked)
+            {
+                Debug.LogWarning(LogTag + " execute blocked by VR_D(" + _vrdReason + "): " + _vrdMessage);
+                return false;
+            }
+            if (_execRoutine != null) StopCoroutine(_execRoutine);
+            _execRoutine = StartCoroutine(CoExecuteGhostToEntity());
+            return true;
+        }
+
+        /// <summary>中止跟随；restoreHome=true 时顺带安全回到 Home_VR_DT（复位/急停用）。</summary>
+        public void StopGhostExecution(bool restoreHome = false)
+        {
+            if (_execRoutine != null)
+            {
+                StopCoroutine(_execRoutine);
+                _execRoutine = null;
+            }
+            if (_executing)
+            {
+                Debug.Log(LogTag + " ghost execution aborted" + (restoreHome ? " → Home_VR_DT" : string.Empty));
+            }
+            _executing = false;
+            _execProgress = 0f;
+            if (restoreHome) RestoreSafePose();
+        }
+
+        private System.Collections.IEnumerator CoExecuteGhostToEntity()
+        {
+            RobotModelController model = Model;
+            if (model == null) yield break;
+
+            float[] from = model.ReadCurrentDisplayDegrees();
+            if (from == null || from.Length < 6) yield break;
+
+            float[] to = (float[])_ghostJoints.Clone();
+            float worstDelta = 0f;
+            for (int i = 0; i < 6; i++) worstDelta = Mathf.Max(worstDelta, Mathf.Abs(to[i] - from[i]));
+
+            float limit = ikController != null ? ikController.JointLimitDeg : 30f;
+            if (worstDelta > limit + 0.01f)
+            {
+                Debug.LogWarning(LogTag + " execute rejected: |Δq|=" + worstDelta.ToString("F2") +
+                                 "° exceeds ±" + limit.ToString("F0") + "° window");
+                _executing = false;
+                yield break;
+            }
+
+            _executing = true;
+            _execProgress = 0f;
+            _execWorstSpeed = 0f;
+            _execPeakErrDeg = Mathf.Max(0.001f, worstDelta);
+
+            var authority = model.CurrentControlAuthority;
+            model.SetControlAuthority(RobotModelController.ControlAuthority.CommandPreview);
+
+            float[] cur = (float[])from.Clone();
+            float startedAt = Time.unscaledTime;
+            float rampIn = 0f;
+
+            while (_executing)
+            {
+                float dt = Mathf.Max(1e-4f, Time.unscaledDeltaTime);
+                rampIn = Mathf.MoveTowards(rampIn, 1f, dt / 0.25f);
+
+                float remain = 0f;
+                for (int i = 0; i < 6; i++) remain = Mathf.Max(remain, Mathf.Abs(to[i] - cur[i]));
+                if (remain <= executeToleranceDeg) break;
+
+                // S 型：起步 0.25 s 渐入 + 末段 4° 渐出，全程不超过参考速度上限。
+                float taper = Mathf.Clamp01(remain / 4f);
+                float factor = Mathf.Clamp01(0.25f + 0.75f * rampIn) * (0.30f + 0.70f * taper);
+                float step = maxJointSpeedDegPerSec * dt * factor;
+
+                for (int i = 0; i < 6; i++)
+                {
+                    float d = to[i] - cur[i];
+                    cur[i] += Mathf.Clamp(d, -step, step);
+                }
+
+                model.ApplyJointDisplayDegrees(cur, false, RobotModelController.PoseSource.CommandPreview, true, false);
+                _execWorstSpeed = Mathf.Max(_execWorstSpeed, step / dt);
+                _execProgress = Mathf.Clamp01(1f - remain / _execPeakErrDeg);
+                yield return null;
+            }
+
+            // 精确落位 + 刷新 q_ref，便于连续下一段微调
+            for (int i = 0; i < 6; i++) cur[i] = to[i];
+            model.ApplyJointDisplayDegrees(cur, false, RobotModelController.PoseSource.CommandPreview, true, true);
+            model.SetControlAuthority(authority);
+            if (ikController != null) ikController.CaptureJointReference();
+
+            _executing = false;
+            _execProgress = 1f;
+            _execRoutine = null;
+            Debug.Log(LogTag + " ghost executed → entity: worstSpeed=" + _execWorstSpeed.ToString("F2") +
+                      "°/s, elapsed=" + (Time.unscaledTime - startedAt).ToString("F2") + "s");
+        }
+
+        private static string FormatDeg(float[] q)
+        {
+            if (q == null) return "null";
+            var parts = new string[q.Length];
+            for (int i = 0; i < q.Length; i++) parts[i] = q[i].ToString("F2");
+            return string.Join(", ", parts);
         }
 
         // ---- 第 4 章工艺/工具门禁（只读镜像，供卡片显示；判定在 ProcessStepGate）----
