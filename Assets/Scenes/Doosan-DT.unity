@@ -26385,12 +26385,12 @@ Transform:
   m_GameObject: {fileID: 290726317}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -7.114752, y: 0.24061662, z: -12.579768}
-  m_LocalScale: {x: 0.8, y: 0.8, z: 0.8}
+  m_LocalPosition: {x: -7.128441, y: 0.24061662, z: -12.5677395}
+  m_LocalScale: {x: 0.85, y: 0.85, z: 0.85}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 1464992603}
-  - {fileID: 1419112789}
+  - {fileID: 1658239760}
   - {fileID: 1841418671}
   - {fileID: 365676106}
   m_Father: {fileID: 1965412955}
@@ -29987,8 +29987,8 @@ MonoBehaviour:
   moveSpeed: 2
   fastMultiplier: 4
   slowMultiplier: 0.25
-  scrollSpeedStep: 0.5
-  minMoveSpeed: 0.2
+  scrollSpeedStep: 0.15
+  minMoveSpeed: 1
   maxMoveSpeed: 20
   requireRightMouseForMove: 1
   lookSensitivity: 0.12
@@ -30024,13 +30024,20 @@ MonoBehaviour:
   hoverColor: {r: 0.55, g: 0.95, b: 1, a: 1}
   dragColor: {r: 0.96, g: 0.65, b: 0.14, a: 1}
   unreachableColor: {r: 1, g: 0.22, b: 0.2, a: 1}
+  limitStopColor: {r: 1, g: 0.8, b: 0.28, a: 1}
   guideLineColor: {r: 0.96, g: 0.65, b: 0.14, a: 0.65}
-  axisXColor: {r: 0.96, g: 0.65, b: 0.14, a: 1}
-  axisYColor: {r: 0.13, g: 0.77, b: 0.37, a: 1}
-  axisZColor: {r: 0.13, g: 0.85, b: 0.94, a: 1}
-  handleRadius: 0.05
-  axisLength: 0.16
-  axisLineWidth: 0.009
+  axisXColor: {r: 0.92, g: 0.2, b: 0.2, a: 1}
+  axisYColor: {r: 0.3, g: 0.85, b: 0.32, a: 1}
+  axisZColor: {r: 0.28, g: 0.52, b: 0.98, a: 1}
+  handleRadius: 0.02
+  axisLength: 0.11
+  axisLineWidth: 0.006
+  constantScreenSize: 1
+  handleScreenRadiusPixels: 8
+  axisScreenLengthPixels: 55
+  axisFrameMode: 0
+  pickRadiusScale: 1.6
+  minPickPixels: 14
   alwaysOnTop: 1
   showAxisLines: 1
   maxStepMeters: 0.005
@@ -30038,9 +30045,6 @@ MonoBehaviour:
   workspaceHalfExtents: {x: 0.5, y: 0.5, z: 0.5}
   solveRateHz: 20
   unreachableErrorMeters: 0.01
-  handleHitLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
   allowRobotDispatch: 0
 --- !u!114 &330585554
 MonoBehaviour:
@@ -57668,7 +57672,7 @@ Transform:
   m_GameObject: {fileID: 608037159}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -9.54, y: 1.5, z: -9.512}
+  m_LocalPosition: {x: -9.54, y: 1.558, z: -9.512}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -122430,7 +122434,7 @@ MonoBehaviour:
   - 0
   - 180
   savedHomes:
-  - name: Home-VR-DT
+  - name: Home_VR_DT
     enabled: 1
     jointDeg:
     - 0
@@ -122439,7 +122443,16 @@ MonoBehaviour:
     - 0
     - 0
     - 180
-  - name: Saty-1
+  - name: Safty_1
+    enabled: 1
+    jointDeg:
+    - -15.8607
+    - 21.6713
+    - 73.48
+    - -0.6
+    - -5.16
+    - 180.5903
+  - name: Screw_10
     enabled: 1
     jointDeg:
     - -15.859256
@@ -122614,7 +122627,7 @@ MonoBehaviour:
   maxSolveTimeMs: 10
   runtimeSolveRateHz: 15
   jointLimitEnabled: 1
-  jointLimitDeg: 10
+  jointLimitDeg: 30
 --- !u!114 &1310431458
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -132589,11 +132602,11 @@ Transform:
   m_GameObject: {fileID: 1419112788}
   serializedVersion: 2
   m_LocalRotation: {x: -0.48766044, y: -0.5120423, z: -0.51204234, w: 0.48766035}
-  m_LocalPosition: {x: -6.5425406, y: -0.54061544, z: 6.045643}
-  m_LocalScale: {x: 0.10000003, y: 0.100000024, z: 0.099999994}
-  m_ConstrainProportionsScale: 1
+  m_LocalPosition: {x: -6.5425396, y: -0.54061544, z: 6.045643}
+  m_LocalScale: {x: 0.100000024, y: 0.100000024, z: 0.099999994}
+  m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 290726318}
+  m_Father: {fileID: 1658239760}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!64 &1419112790
 MeshCollider:
@@ -153904,6 +153917,38 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Role: 7
+--- !u!1 &1658239759
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1658239760}
+  m_Layer: 0
+  m_Name: "\u653E\u7F6E\u53F0-Scale"
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1658239760
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1658239759}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.17, y: 0, z: 0}
+  m_LocalScale: {x: 1.1, y: 1.05, z: 1.05}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1419112789}
+  m_Father: {fileID: 290726318}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1659494716
 GameObject:
   m_ObjectHideFlags: 0
@@ -169149,14 +169194,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1841418670}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
   m_LocalPosition: {x: 1.4148407, y: 0.6876835, z: -0.53619385}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1.35, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 694859115}
   m_Father: {fileID: 290726318}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
 --- !u!1 &1842042379
 GameObject:
   m_ObjectHideFlags: 0

@@ -49,6 +49,15 @@ namespace DigitalTwin.Interaction
         [Tooltip("场景中的 TwinCommandController（ghost 目标缓存）。")]
         [SerializeField] private TwinCommandController commandController;
 
+        /// <summary>三轴显示/锁轴使用的参考系。</summary>
+        public enum AxisFrameMode
+        {
+            /// <summary>ROS REP-103 风格：X 朝外（基座正前）、Y 朝左、Z 朝上。默认。</summary>
+            RosWorldZUp = 0,
+            /// <summary>工具轴风格：X 沿 TCP 刀轴朝外、Z 为工具"上"、右手三指。</summary>
+            TcpToolFrame = 1
+        }
+
         [Header("手柄外观（R3 主题：青 / 琥珀）")]
         [Tooltip("空闲色（默认青）。")]
         [SerializeField] private Color idleColor = new Color(0.13f, 0.85f, 0.94f, 1f);
@@ -58,20 +67,37 @@ namespace DigitalTwin.Interaction
         [SerializeField] private Color dragColor = new Color(0.96f, 0.65f, 0.14f, 1f);
         [Tooltip("不可达 / 关节越界色（红）。")]
         [SerializeField] private Color unreachableColor = new Color(1f, 0.22f, 0.2f, 1f);
+        [Tooltip("顶到 ±30°/轴 限位时的提示色（琥珀，非故障）。")]
+        [SerializeField] private Color limitStopColor = new Color(1f, 0.80f, 0.28f, 1f);
         [Tooltip("TCP→目标引导线颜色。")]
         [SerializeField] private Color guideLineColor = new Color(0.96f, 0.65f, 0.14f, 0.65f);
-        [Tooltip("X 轴短线颜色。")]
-        [SerializeField] private Color axisXColor = new Color(0.96f, 0.65f, 0.14f, 1f);
-        [Tooltip("Y 轴短线颜色。")]
-        [SerializeField] private Color axisYColor = new Color(0.13f, 0.77f, 0.37f, 1f);
-        [Tooltip("Z 轴短线颜色。")]
-        [SerializeField] private Color axisZColor = new Color(0.13f, 0.85f, 0.94f, 1f);
-        [Tooltip("球体半径（米）。")]
-        [SerializeField, Range(0.01f, 0.5f)] private float handleRadius = 0.05f;
-        [Tooltip("三轴短线长度（米）。")]
-        [SerializeField, Range(0.02f, 1f)] private float axisLength = 0.16f;
+        [Tooltip("X 轴短线颜色（朝外，标准红）。")]
+        [SerializeField] private Color axisXColor = new Color(0.92f, 0.20f, 0.20f, 1f);
+        [Tooltip("Y 轴短线颜色（朝左，标准绿）。")]
+        [SerializeField] private Color axisYColor = new Color(0.30f, 0.85f, 0.32f, 1f);
+        [Tooltip("Z 轴短线颜色（朝上，标准蓝）。")]
+        [SerializeField] private Color axisZColor = new Color(0.28f, 0.52f, 0.98f, 1f);
+        [Tooltip("球体半径（米）。constantScreenSize=false 时使用。")]
+        [SerializeField, Range(0.004f, 0.1f)] private float handleRadius = 0.02f;
+        [Tooltip("三轴短线长度（米）。constantScreenSize=false 时使用。")]
+        [SerializeField, Range(0.02f, 0.5f)] private float axisLength = 0.11f;
         [Tooltip("三轴短线线宽（米）。")]
-        [SerializeField, Range(0.001f, 0.05f)] private float axisLineWidth = 0.009f;
+        [SerializeField, Range(0.001f, 0.03f)] private float axisLineWidth = 0.006f;
+
+        [Header("手柄尺寸：屏幕恒定（推荐）")]
+        [Tooltip("勾选后球与三轴随相机距离缩放 —— 近看不巨大、远看不消失（与 Unity 原生 gizmo 一致）。" +
+                 "关闭则使用上面的固定米制尺寸。")]
+        [SerializeField] private bool constantScreenSize = true;
+        [Tooltip("球的屏幕半径（像素，以 1080p 高度为基准）。默认 8 px ≈ 直径 16 px。")]
+        [SerializeField, Range(4f, 40f)] private float handleScreenRadiusPixels = 8f;
+        [Tooltip("三轴的屏幕长度（像素，以 1080p 高度为基准）。")]
+        [SerializeField, Range(20f, 160f)] private float axisScreenLengthPixels = 55f;
+        [Tooltip("三轴参考系：RosWorldZUp = X 朝外 / Z 朝上（推荐）；TcpToolFrame = X 沿刀轴。")]
+        [SerializeField] private AxisFrameMode axisFrameMode = AxisFrameMode.RosWorldZUp;
+        [Tooltip("拾取半径相对球半径的放大倍数（手感用，不影响显示大小）。")]
+        [SerializeField, Range(1f, 4f)] private float pickRadiusScale = 1.6f;
+        [Tooltip("拾取最小屏幕半径（像素）。球再小也点得中。")]
+        [SerializeField, Range(4f, 40f)] private float minPickPixels = 14f;
         [Tooltip("手柄是否始终绘制在最前（关闭深度测试），便于被机器人遮挡时仍可见。")]
         [SerializeField] private bool alwaysOnTop = true;
         [Tooltip("是否绘制三轴短线。")]
@@ -88,8 +114,6 @@ namespace DigitalTwin.Interaction
         [SerializeField, Range(1f, 60f)] private float solveRateHz = 20f;
         [Tooltip("位置误差超过该值即判定不可达（手柄变红 + HUD 提示），单位 m。")]
         [SerializeField, Range(0.002f, 0.2f)] private float unreachableErrorMeters = 0.01f;
-        [Tooltip("手柄拾取射线使用的 LayerMask（默认全部层）。")]
-        [SerializeField] private LayerMask handleHitLayers = ~0;
 
         [Header("下发硬开关（默认关闭）")]
         [Tooltip("false = 只做本地 ghost 预览：任何路径都不调用 EnterExecute / 不发起 MOVE_JOINT；" +
@@ -127,6 +151,10 @@ namespace DigitalTwin.Interaction
         private bool _solveDirty;
         private bool _reachable = true;
         private bool _jointLimitsOk = true;
+        // ±jointLimitDeg/轴 硬停止：解被关节限幅截断时，把 ghost 目标回贴到实际 TCP，避免目标跑飞后判成"不可达"。
+        private bool _limitStop;
+        private float _worstClampDeg;
+        private float _renderRadius = 0.02f;
         private bool _statusWarningLogged;
         private bool _planSkipLogged;
 
@@ -194,6 +222,22 @@ namespace DigitalTwin.Interaction
         public Color IdleColorValue => idleColor;
         public Color DragColorValue => dragColor;
         public Color UnreachableColorValue => unreachableColor;
+        public Color LimitStopColorValue => limitStopColor;
+        public bool LimitStop => _limitStop;
+        public float WorstClampDeg => _worstClampDeg;
+        public float HandleRadiusValue => handleRadius;
+        public float AxisLengthValue => axisLength;
+        public bool ConstantScreenSize => constantScreenSize;
+        /// <summary>当前实际渲染的世界半径（米）。</summary>
+        public float RenderRadiusValue => _renderRadius;
+        /// <summary>当前球在屏幕上的像素半径（自检用）。</summary>
+        public float ScreenRadiusPixels => _renderRadius * PixelsPerMeter(_targetPosition);
+        public AxisFrameMode AxisFrame => axisFrameMode;
+        public Vector3 AxisFrameX { get { CaptureHandleFrame(); return _frameX; } }
+        public Vector3 AxisFrameY { get { CaptureHandleFrame(); return _frameY; } }
+        public Vector3 AxisFrameZ { get { CaptureHandleFrame(); return _frameZ; } }
+        /// <summary>屏幕点是否落在手柄拾取体内（自检/回归用，等价于左键命中判定）。</summary>
+        public bool IsPointerOnHandleForTest(Vector3 screenPoint) => IsPointerOnHandle(new Vector2(screenPoint.x, screenPoint.y));
         public string IkStatusText => _statusText;
         public float PositionErrorMeters { get; private set; }
         public float RotationErrorDeg { get; private set; }
@@ -221,6 +265,8 @@ namespace DigitalTwin.Interaction
             ikController.SetTargetPose(pos, rot);
             ikController.ResetTargetToTcp();
             _hasPendingTarget = false;
+            InvalidateHandleFrame();
+            CaptureHandleFrame();
             EnsureVisuals();
             EnsureHud();
             Debug.Log("[PLAY-IK] recaptured TCP after switch: " + FormatVector(pos));
@@ -261,7 +307,7 @@ namespace DigitalTwin.Interaction
             {
                 if (_handleRoot != null) _handleRoot.gameObject.SetActive(true);
                 if (_sphereGo != null) _sphereGo.SetActive(true);
-                // 以“此刻的姿态”作为 ±10° 限幅基准，避免开启瞬间就被大角度解带飞。
+                // 以“此刻的姿态”作为 ±30° 限幅基准，避免开启瞬间就被大角度解带飞。
                 if (ikController != null) ikController.CaptureJointReference();
                 RecaptureTcp();
                 SetIkSolverActive(true);
@@ -550,7 +596,10 @@ namespace DigitalTwin.Interaction
             _initialized = true;
             _hasPendingTarget = false;
             _reachable = true;
+            _limitStop = false;
             _statusText = ikController.LastStatus.ToString();
+            InvalidateHandleFrame();
+            CaptureHandleFrame();
 
             RobotModelController model = ikController.RobotModel;
             string tcpLabel = ikController.GetEffectiveTcpLabel();
@@ -591,6 +640,8 @@ namespace DigitalTwin.Interaction
         {
             _reachable = true;
             _jointLimitsOk = true;
+            _limitStop = false;
+            _worstClampDeg = 0f;
             _statusWarningLogged = false;
             _statusText = "Idle";
         }
@@ -709,6 +760,9 @@ namespace DigitalTwin.Interaction
             _dragStartTargetPosition = _targetPosition;
             _dragStartTargetRotation = _targetRotation;
             _axisLock = -1;
+            _limitStop = false;
+            InvalidateHandleFrame();
+            CaptureHandleFrame();
             _dragging = true;
             _testDragActive = false;
             _hasPendingTarget = true;
@@ -729,6 +783,9 @@ namespace DigitalTwin.Interaction
             _dragStartTargetRotation = _targetRotation;
             _grabOffset = Vector3.zero;
             _axisLock = -1;
+            _limitStop = false;
+            InvalidateHandleFrame();
+            CaptureHandleFrame();
             _dragging = true;
             _testDragActive = true;
             _hasPendingTarget = true;
@@ -764,9 +821,120 @@ namespace DigitalTwin.Interaction
                 return desired;
             }
 
-            Vector3 axis = _axisLock == 0 ? Vector3.right : (_axisLock == 1 ? Vector3.up : Vector3.forward);
+            CaptureHandleFrame();
+            Vector3 axis = _axisLock == 0 ? _frameX : (_axisLock == 1 ? _frameY : _frameZ);
             Vector3 delta = desired - _dragStartTargetPosition;
             return _dragStartTargetPosition + axis * Vector3.Dot(delta, axis);
+        }
+
+        // ---- 手柄三轴参考系（显示与锁轴共用同一套轴，保证"看到的轴 = 拖动的方向"）----
+        private Vector3 _frameX = Vector3.right;
+        private Vector3 _frameY = Vector3.up;
+        private Vector3 _frameZ = Vector3.forward;
+        private bool _frameCaptured;
+
+        /// <summary>
+        /// 计算并缓存三轴参考系（首次/复位/TCP 切换时重算；拖动期间保持不变，避免锁轴方向漂移）。
+        /// RosWorldZUp：X = 基座→TCP 的水平朝外方向，Z = 世界上方，Y = 左手侧（屏幕表现对齐 ROS REP-103）。
+        /// </summary>
+        private void CaptureHandleFrame()
+        {
+            if (_frameCaptured)
+            {
+                return;
+            }
+
+            _frameCaptured = true;
+
+            if (axisFrameMode == AxisFrameMode.TcpToolFrame)
+            {
+                // 工具系：X 沿刀轴朝外，Z 为工具"上"，Y 补足。
+                Vector3 x = _targetRotation * Vector3.forward;
+                if (x.sqrMagnitude < 1e-6f)
+                {
+                    x = Vector3.forward;
+                }
+
+                x.Normalize();
+                Vector3 z = Vector3.ProjectOnPlane(_targetRotation * Vector3.up, x);
+                if (z.sqrMagnitude < 1e-6f)
+                {
+                    z = Vector3.ProjectOnPlane(Vector3.up, x);
+                }
+
+                if (z.sqrMagnitude < 1e-6f)
+                {
+                    z = Vector3.Cross(x, Vector3.right);
+                }
+
+                z.Normalize();
+                _frameX = x;
+                _frameZ = z;
+                _frameY = Vector3.Cross(_frameX, _frameZ).normalized;
+                return;
+            }
+
+            // RosWorldZUp（默认）
+            Vector3 outward = Vector3.zero;
+            if (ikController != null)
+            {
+                outward = _initialTcpPosition - ikController.transform.position;
+            }
+
+            outward.y = 0f;
+            if (outward.sqrMagnitude < 1e-6f && ikController != null)
+            {
+                outward = ikController.transform.forward;
+                outward.y = 0f;
+            }
+
+            if (outward.sqrMagnitude < 1e-6f && playCamera != null)
+            {
+                outward = playCamera.transform.forward;
+                outward.y = 0f;
+            }
+
+            if (outward.sqrMagnitude < 1e-6f)
+            {
+                outward = Vector3.forward;
+            }
+
+            _frameX = outward.normalized;      // 朝外
+            _frameZ = Vector3.up;              // 朝上
+            _frameY = Vector3.Cross(_frameX, _frameZ).normalized; // 左手侧
+        }
+
+        private void InvalidateHandleFrame()
+        {
+            _frameCaptured = false;
+        }
+
+        // ---- 渲染尺寸（屏幕恒定或固定米制）----
+
+        /// <summary>当前球体世界半径（米）：屏幕恒定时按相机距离换算，并夹在合理范围内。</summary>
+        private float RenderRadius()
+        {
+            if (!constantScreenSize)
+            {
+                return Mathf.Max(0.001f, handleRadius);
+            }
+
+            float ppm = Mathf.Max(1f, PixelsPerMeter(_targetPosition));
+            float px = Mathf.Max(2f, handleScreenRadiusPixels * (Screen.height / 1080f));
+            return Mathf.Clamp(px / ppm, 0.005f, 0.09f);
+        }
+
+        /// <summary>当前三轴世界长度（米）。</summary>
+        private float RenderAxisLength()
+        {
+            if (!constantScreenSize)
+            {
+                return Mathf.Max(0.005f, axisLength);
+            }
+
+            float ppm = Mathf.Max(1f, PixelsPerMeter(_targetPosition));
+            float px = Mathf.Max(4f, axisScreenLengthPixels * (Screen.height / 1080f));
+            return Mathf.Clamp(px / ppm, 0.01f, 0.35f);
         }
 
         // ================================================================== 拖动 / ghost 预览
@@ -848,6 +1016,17 @@ namespace DigitalTwin.Interaction
             _lastSolution = ikController.GetLastSolutionDegreesCopy();
             _hasSolution = ikController.HasLastSolution && _lastSolution.Length > 0;
             _jointLimitsOk = CheckJointLimits(_lastSolution);
+            _limitStop = ikController.LastSolutionClamped;
+            _worstClampDeg = ikController.LastSolutionClampDeg;
+
+            // ±jointLimitDeg/轴 硬停止（手感）：解被逐轴限幅截断时，把 ghost 目标回贴到"实际到达的 TCP"。
+            // 否则目标会带着鼠标继续跑飞 → 误差超阈 → 被误判成"不可达/红球"，用户观感就是"拖不动"。
+            if (_limitStop && _hasSolution &&
+                ikController.TryGetSolutionTcpPose(out Vector3 reachedPos, out _) && IsFinite(reachedPos))
+            {
+                _targetPosition = reachedPos;
+                _statusText = "JointLimitStop(±" + ikController.JointLimitDeg.ToString("0.#") + "°/轴)";
+            }
 
             if (!_jointLimitsOk)
             {
@@ -882,7 +1061,12 @@ namespace DigitalTwin.Interaction
                 _statusText = "NoSolution (" + _statusText + ")";
             }
 
-            if (_reachable && (float.IsNaN(PositionErrorMeters) || float.IsInfinity(PositionErrorMeters)
+            if (_limitStop)
+            {
+                // 顶到 ±30°/轴 限位不是故障：保持可达、给琥珀提示色。
+                _reachable = true;
+            }
+            else if (_reachable && (float.IsNaN(PositionErrorMeters) || float.IsInfinity(PositionErrorMeters)
                 || PositionErrorMeters > unreachableErrorMeters))
             {
                 _reachable = false;
@@ -1085,6 +1269,42 @@ namespace DigitalTwin.Interaction
 
         // ================================================================== 测试入口（UI/18 自检用）
 
+        /// <summary>
+        /// 自检入口：用屏幕坐标走一遍**真实拾取 + 起拖**路径（UI 遮挡 → 命中 → 起拖），
+        /// 不读鼠标硬件。回归"开启 IK 后点不中手柄"这类问题就靠它。
+        /// </summary>
+        public bool BeginDragAtScreenPointForTest(Vector2 screenPoint)
+        {
+            if (!_initialized)
+            {
+                TryInitialize();
+            }
+
+            if (!_initialized)
+            {
+                return false;
+            }
+
+            if (_dragging)
+            {
+                return true;
+            }
+
+            if (IsPointerOverUi(screenPoint))
+            {
+                Debug.Log(LogTag + " test pick blocked by interactive UI at " + screenPoint);
+                return false;
+            }
+
+            if (!IsPointerOnHandle(screenPoint))
+            {
+                Debug.Log(LogTag + " test pick miss at " + screenPoint + " handleScreen=" + (Vector2)HandleScreenPosition);
+                return false;
+            }
+
+            return BeginDragFromPointer(screenPoint);
+        }
+
         public bool BeginDragForTest()
         {
             if (!_initialized)
@@ -1277,8 +1497,10 @@ namespace DigitalTwin.Interaction
 
             Color color = ComputeHandleColor();
             CurrentHandleColor = color;
+            float renderRadius = RenderRadius();
+            _renderRadius = renderRadius;
             _sphereGo.transform.position = _targetPosition;
-            _sphereGo.transform.localScale = Vector3.one * (handleRadius * 2f);
+            _sphereGo.transform.localScale = Vector3.one * (renderRadius * 2f);
 
             if (_sphereMaterial != null)
             {
@@ -1287,8 +1509,11 @@ namespace DigitalTwin.Interaction
 
             if (showAxisLines && _axisLines != null)
             {
-                Vector3[] axes = { Vector3.right, Vector3.up, Vector3.forward };
+                CaptureHandleFrame();
+                Vector3[] axes = { _frameX, _frameY, _frameZ };
                 Color[] baseColors = { axisXColor, axisYColor, axisZColor };
+                float renderAxis = RenderAxisLength();
+                float widthScale = Mathf.Clamp(renderRadius / 0.02f, 0.4f, 3f);
                 for (int i = 0; i < _axisLines.Length; i++)
                 {
                     LineRenderer line = _axisLines[i];
@@ -1297,7 +1522,7 @@ namespace DigitalTwin.Interaction
                         continue;
                     }
 
-                    float length = axisLength;
+                    float length = renderAxis;
                     if (_axisLock == i)
                     {
                         length *= 1.35f;
@@ -1313,7 +1538,7 @@ namespace DigitalTwin.Interaction
 
                     line.startColor = axisColor;
                     line.endColor = axisColor;
-                    line.startWidth = axisLineWidth * (_axisLock == i ? 2.2f : 1f);
+                    line.startWidth = axisLineWidth * widthScale * (_axisLock == i ? 2.2f : 1f);
                     line.endWidth = line.startWidth;
                 }
             }
@@ -1345,6 +1570,11 @@ namespace DigitalTwin.Interaction
             if (!_reachable || !_jointLimitsOk)
             {
                 return unreachableColor;
+            }
+
+            if (_limitStop)
+            {
+                return limitStopColor;
             }
 
             if (_dragging)
@@ -1502,6 +1732,10 @@ namespace DigitalTwin.Interaction
             sb.AppendLine("reach " + reach + "   axis " + axis + "   step "
                 + (maxStepMeters * 1000f).ToString("F1") + " mm   lastStep "
                 + (_lastStepMeters * 1000f).ToString("F2") + " mm   boundsClamp=" + (_workspaceClamped ? "1" : "0"));
+            sb.AppendLine("三轴 " + (axisFrameMode == AxisFrameMode.RosWorldZUp ? "X朝外/Y朝左/Z朝上" : "X刀轴/Y右/Z上")
+                + "   ball=" + ScreenRadiusPixels.ToString("F0") + "px/" + (_renderRadius * 2000f).ToString("F0") + "mm"
+                + "   limit=±" + (ikController != null ? ikController.JointLimitDeg.ToString("0.#") : "30") + "°/轴"
+                + (_limitStop ? "   ★已顶到限位" : string.Empty));
             sb.AppendLine("ghost updates " + _planUpdates + "   enterExecute " + _enterExecuteCalls
                 + "   dispatchCalls " + DispatchCalls + "   planEnter " + _planEnterAttempts);
             sb.AppendLine("LMB 拖动 | X/Y/Z 或 1/2/3 锁轴 | Shift 精调 | R 回当前 | Esc 取消");
@@ -1513,32 +1747,60 @@ namespace DigitalTwin.Interaction
 
         // ================================================================== 指针/UI 工具
 
+        /// <summary>
+        /// 拾取判断：射线到球心距离 ≤ 拾取半径即可抓（不依赖 Collider）。
+        /// 旧实现走 Physics.RaycastAll 且跳过 isTrigger —— 而手柄球本身是 trigger，
+        /// 于是永远返回 false（"开启 IK 后拖不动"的根因）。
+        /// 现在纯解析判定：球再小也按 minPickPixels 保证点得中。
+        /// </summary>
         private bool IsPointerOnHandle(Vector2 screenPoint)
         {
-            if (playCamera == null || _handleRoot == null)
+            if (playCamera == null || _sphereGo == null || !_sphereGo.activeSelf)
             {
                 return false;
             }
 
-            Ray ray = playCamera.ScreenPointToRay(screenPoint);
-            RaycastHit[] hits = Physics.RaycastAll(ray, 500f, handleHitLayers.value, QueryTriggerInteraction.Collide);
-            // 必须“明确命中”手柄：最近的实体命中必须属于手柄根节点，隔墙/隔物点不到。
-            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-            for (int i = 0; i < hits.Length; i++)
-            {
-                Collider collider = hits[i].collider;
-                if (collider == null || collider.isTrigger)
-                {
-                    continue;
-                }
+            Vector3 center = _sphereGo.transform.position;
+            float renderRadius = RenderRadius();
+            float worldRadius = Mathf.Max(0.0005f, renderRadius) * Mathf.Max(1f, pickRadiusScale);
+            float minWorldRadius = minPickPixels / Mathf.Max(1f, PixelsPerMeter(center));
+            float pickRadius = Mathf.Max(worldRadius, minWorldRadius);
 
-                return collider.transform == _handleRoot || collider.transform.IsChildOf(_handleRoot);
+            Ray ray = playCamera.ScreenPointToRay(screenPoint);
+            Vector3 toCenter = center - ray.origin;
+            float along = Vector3.Dot(toCenter, ray.direction);
+            if (along <= 0f)
+            {
+                return false;
             }
 
-            return false;
+            Vector3 closest = ray.origin + ray.direction * along;
+            return (closest - center).sqrMagnitude <= pickRadius * pickRadius;
         }
 
-        private static bool IsPointerOverUi(Vector2 screenPoint)
+        /// <summary>世界点所在处的屏幕像素/米（透视按视锥算，正交按 size 算）。</summary>
+        private float PixelsPerMeter(Vector3 worldPoint)
+        {
+            if (playCamera == null || Screen.height <= 0)
+            {
+                return 1000f;
+            }
+
+            if (playCamera.orthographic)
+            {
+                return Screen.height / Mathf.Max(0.0001f, playCamera.orthographicSize * 2f);
+            }
+
+            float distance = Mathf.Max(0.01f, Vector3.Dot(worldPoint - playCamera.transform.position, playCamera.transform.forward));
+            float worldHeight = 2f * distance * Mathf.Tan(playCamera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+            return Screen.height / Mathf.Max(0.0001f, worldHeight);
+        }
+
+        /// <summary>
+        /// 只把"可交互控件"（按钮/滑条/折叠头等 Selectable）算作 UI 遮挡。
+        /// 全屏背景 Image 不再吞掉射线 —— 否则页面打开时手柄永远点不到。
+        /// </summary>
+        private bool IsPointerOverUi(Vector2 screenPoint)
         {
             EventSystem eventSystem = EventSystem.current;
             if (eventSystem == null)
@@ -1549,7 +1811,26 @@ namespace DigitalTwin.Interaction
             var data = new PointerEventData(eventSystem) { position = screenPoint };
             var results = new List<RaycastResult>();
             eventSystem.RaycastAll(data, results);
-            return results.Count > 0;
+            for (int i = 0; i < results.Count; i++)
+            {
+                GameObject hit = results[i].gameObject;
+                if (hit == null)
+                {
+                    continue;
+                }
+
+                if (hit.GetComponentInParent<Selectable>() != null)
+                {
+                    return true;
+                }
+
+                if (_hudCanvasRoot != null && hit.transform.IsChildOf(_hudCanvasRoot.transform))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         // ================================================================== 材质 / 工具

@@ -240,15 +240,32 @@ namespace DigitalTwin
         [SerializeField, Tooltip("勾选后，IK 解逐轴夹紧在 q_ref ± jointLimitDeg 内。")]
         private bool jointLimitEnabled = true;
 
-        [SerializeField, Tooltip("单轴相对 q_ref 的最大变化量（度）。")]
-        private float jointLimitDeg = 10f;
+        [SerializeField, Tooltip("单轴相对 q_ref 的最大变化量（度）。默认 30°，六轴各自独立限幅。")]
+        private float jointLimitDeg = 30f;
 
         private float[] _jointRefDeg = System.Array.Empty<float>();
         private bool _hasJointRef;
 
+        // ±jointLimitDeg 逐轴夹紧结果（供拖拽手柄做"硬停止"用）
+        private bool _lastSolutionClamped;
+        private float _lastClampDeg;
+
         public bool JointLimitEnabled => jointLimitEnabled;
         public float JointLimitDeg => jointLimitDeg;
         public bool HasJointReference => _hasJointRef;
+        /// <summary>上一次求解是否真的被 ±jointLimitDeg 截断（至少一根轴顶到限位）。</summary>
+        public bool LastSolutionClamped => _lastSolutionClamped;
+        /// <summary>上一次求解里被截掉的最大角度（度），0 = 未触发限幅。</summary>
+        public float LastSolutionClampDeg => _lastClampDeg;
+
+        /// <summary>q_ref（开启拖拽时记录的六轴基准角）副本；未记录时返回空。</summary>
+        public float[] GetJointReferenceDegreesCopy()
+        {
+            if (!_hasJointRef || _jointRefDeg == null) return System.Array.Empty<float>();
+            float[] copy = new float[_jointRefDeg.Length];
+            System.Array.Copy(_jointRefDeg, copy, copy.Length);
+            return copy;
+        }
 
         /// <summary>记录当前 6 轴关节角作为 q_ref（开启 IK 拖拽时调用）。</summary>
         public bool CaptureJointReference()
@@ -296,20 +313,37 @@ namespace DigitalTwin
             jointLimitDeg = Mathf.Max(0.5f, deg);
         }
 
-        /// <summary>把解逐轴夹紧到 q_ref ± jointLimitDeg；未记录 q_ref 时自动以当前姿态为基准。</summary>
-        private void ClampSolutionToJointReference(float[] solution)
+        /// <summary>
+        /// 把解逐轴夹紧到 q_ref ± jointLimitDeg —— **六根轴各自独立限幅**（每轴都可 ±30°）。
+        /// 返回 true 表示至少一根轴被截断，并回填最大截断量。
+        /// </summary>
+        private bool ClampSolutionToJointReference(float[] solution, out float maxClampDeg)
         {
-            if (!jointLimitEnabled || solution == null || solution.Length == 0) return;
+            maxClampDeg = 0f;
+            if (!jointLimitEnabled || solution == null || solution.Length == 0) return false;
             if (!_hasJointRef || _jointRefDeg.Length != solution.Length)
             {
-                if (!CaptureJointReference() || _jointRefDeg.Length != solution.Length) return;
+                if (!CaptureJointReference() || _jointRefDeg.Length != solution.Length) return false;
             }
+
+            bool clamped = false;
             for (int i = 0; i < solution.Length; i++)
             {
                 float lo = _jointRefDeg[i] - jointLimitDeg;
                 float hi = _jointRefDeg[i] + jointLimitDeg;
-                solution[i] = Mathf.Clamp(solution[i], lo, hi);
+                float raw = solution[i];
+                float fixedValue = Mathf.Clamp(raw, lo, hi);
+                float overshoot = Mathf.Abs(raw - fixedValue);
+                if (overshoot > 1e-4f)
+                {
+                    clamped = true;
+                    if (overshoot > maxClampDeg) maxClampDeg = overshoot;
+                }
+
+                solution[i] = fixedValue;
             }
+
+            return clamped;
         }
 
         /// <summary>
@@ -408,8 +442,8 @@ namespace DigitalTwin
             float[] seed = robotModel.ReadCurrentDisplayDegrees();
             bool solved = SolveDampedLeastSquares(seed, targetPos, targetRot, out float[] solution, out IkStatus status, out float posErr, out float rotErr, out int iterations);
 
-            // ±jointLimitDeg 限幅（防翻腕）：以“开启拖拽时记录的 q_ref”为基准逐轴夹紧。
-            ClampSolutionToJointReference(solution);
+            // ±jointLimitDeg 限幅（防翻腕）：以“开启拖拽时记录的 q_ref”为基准，六轴各自夹紧。
+            _lastSolutionClamped = ClampSolutionToJointReference(solution, out _lastClampDeg);
 
             _lastStatus = status;
             _lastPositionError = posErr;
@@ -458,6 +492,19 @@ namespace DigitalTwin
             float[] copy = new float[_lastSolutionDeg.Length];
             Array.Copy(_lastSolutionDeg, copy, copy.Length);
             return copy;
+        }
+
+        /// <summary>当前"上一次解"对应的 TCP 位姿（限幅后实际能到的位置），用于硬停止回贴。</summary>
+        public bool TryGetSolutionTcpPose(out Vector3 position, out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            if (!_hasLastSolution || robotModel == null || _lastSolutionDeg == null || _lastSolutionDeg.Length == 0)
+            {
+                return false;
+            }
+
+            return robotModel.EvaluateTcpPoseDegrees(_lastSolutionDeg, tcpTransform, tcpLocalOffsetPosition, tcpLocalOffsetEulerDeg, out position, out rotation);
         }
 
         private bool SolveDampedLeastSquares(float[] seedDeg, Vector3 targetPos, Quaternion targetRot, out float[] solutionDeg, out IkStatus status, out float finalPosError, out float finalRotErrorDeg, out int iterations)

@@ -61,10 +61,10 @@ namespace DigitalTwin.Interaction
         [SerializeField, Range(1f, 10f)] private float fastMultiplier = 4f;
         [Tooltip("按住 Ctrl 的减速倍率。")]
         [SerializeField, Range(0.05f, 1f)] private float slowMultiplier = 0.25f;
-        [Tooltip("滚轮一格改变的基准速度（米/秒）。")]
-        [SerializeField, Range(0.05f, 2f)] private float scrollSpeedStep = 0.5f;
-        [Tooltip("基准速度下限（米/秒）。")]
-        [SerializeField, Range(0.05f, 10f)] private float minMoveSpeed = 0.2f;
+        [Tooltip("滚轮一格改变的基准速度比例（0.15 = 每格 ×1.15 或 ÷1.15，等比调速）。")]
+        [SerializeField, Range(0.02f, 0.5f)] private float scrollSpeedStep = 0.15f;
+        [Tooltip("基准速度下限（米/秒）。默认 1.0 —— 防止误滚滚轮把漫游压成爬行。")]
+        [SerializeField, Range(0.3f, 10f)] private float minMoveSpeed = 1f;
         [Tooltip("基准速度上限（米/秒）。")]
         [SerializeField, Range(0.5f, 40f)] private float maxMoveSpeed = 20f;
         [Tooltip("必须按住右键才允许 WASD/QE 平移（默认开，接近 Scene 视图手感）。")]
@@ -114,6 +114,8 @@ namespace DigitalTwin.Interaction
         private bool _ownsCameraInput;
         private bool _holdPrev;
         private Vector2? _pointerOverride;
+        private float _lastSpeedLogTime = -10f;
+        private bool _wheelBlockedByUi;
 
         // 初始位姿（用于自检结束时还原现场）
         private Vector3 _initialPosition;
@@ -205,6 +207,11 @@ namespace DigitalTwin.Interaction
             {
                 Debug.Log("[PLAY-CAM] rig ready camera=" + CameraPath() + " speed=" + moveSpeed.ToString("F2")
                     + " disabled=" + (string.IsNullOrEmpty(disabledControllers) ? "(none)" : disabledControllers));
+                Debug.Log("[PLAY-CAM] WASD 漫游：滚轮=基准速度(等比)，Shift=" + fastMultiplier.ToString("0.#")
+                    + "× 加速，Ctrl=" + slowMultiplier.ToString("0.##") + "× 减速，下限 "
+                    + minMoveSpeed.ToString("0.##") + " m/s；"
+                    + (requireRightMouseForMove ? "需按住右键才平移；" : "无需右键；")
+                    + "指针停在 UI 面板上时 WASD 会被让路。");
             }
         }
 
@@ -415,10 +422,28 @@ namespace DigitalTwin.Interaction
                 _targetPitch = Mathf.Clamp(_targetPitch - input.lookDelta.y * lookSensitivity, pitchMin, pitchMax);
             }
 
+            // 滚轮调速：**只在指针不在 UI 面板上时生效**。
+            // 否则在"DT 工作台"里用滚轮翻卡片/滚列表时，会把漫游基准速度一起改掉
+            // （这正是"有时候 WASD 突然很慢"的真凶）。指针压在 UI 上时滚轮完全交给 EventSystem。
             if (input.scrollNotches != 0f)
             {
-                moveSpeed = Mathf.Clamp(moveSpeed + input.scrollNotches * scrollSpeedStep, minMoveSpeed, maxMoveSpeed);
-                currentSpeed = moveSpeed;
+                if (pointerOverUi)
+                {
+                    if (!_wheelBlockedByUi)
+                    {
+                        _wheelBlockedByUi = true;
+                        Debug.Log("[PLAY-CAM] 指针在 UI 面板上：滚轮交给界面（翻卡片/滚列表），不调漫游速度。");
+                    }
+                }
+                else
+                {
+                    _wheelBlockedByUi = false;
+                    // 等比调速：避免"绝对值步长"在低速端一下把速度压到爬行。
+                    float factor = Mathf.Clamp(1f + scrollSpeedStep * input.scrollNotches, 0.5f, 2f);
+                    moveSpeed = Mathf.Clamp(moveSpeed * factor, minMoveSpeed, maxMoveSpeed);
+                    currentSpeed = moveSpeed;
+                    LogSpeedChangeOnce();
+                }
             }
 
             if (manageCursor)
@@ -533,6 +558,19 @@ namespace DigitalTwin.Interaction
                 Cursor.visible = true;
                 _cursorLockedByUs = false;
             }
+        }
+
+        /// <summary>滚轮调速时打一行日志（0.4 s 节流），让"速度被改了"这件事可见。</summary>
+        private void LogSpeedChangeOnce()
+        {
+            if (Time.unscaledTime - _lastSpeedLogTime < 0.4f)
+            {
+                return;
+            }
+
+            _lastSpeedLogTime = Time.unscaledTime;
+            Debug.Log("[PLAY-CAM] 滚轮调速 → 基准 " + moveSpeed.ToString("F2") + " m/s"
+                + "（Shift 加速 " + fastMultiplier.ToString("0.#") + "× / Ctrl 减速 " + slowMultiplier.ToString("0.##") + "×）");
         }
 
         private void OnDisable()
